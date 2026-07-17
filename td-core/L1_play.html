@@ -57,7 +57,8 @@
 
   /* ===== 商店 ===== */
   #shop { padding: 8px 12px 6px; }
-  #shopRow { display: flex; gap: 7px; min-height: 78px; }
+  #shopRow { display: flex; gap: 7px; min-height: 78px; overflow-x: hidden; padding-bottom: 2px; }
+  #shopRow.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
   .slot {
     flex: 1; min-height: 72px; border-radius: 11px; padding: 5px 2px;
     background: #131c2b; border: 1.5px solid #263650;
@@ -74,6 +75,7 @@
   .slot .nm { font-size: 10px; color: #c4d0e0; }
   .slot .cost { font-size: 11px; font-weight: 700; color: #ffd24a; }
   .slot .cost.free::before { content: ""; }
+  #shopRow.scroll .slot { flex: 0 0 calc((100% - 21px) / 4); }
 
   /* 格子卡形状预览（小 SVG 网格） */
   .tile-preview {
@@ -91,6 +93,8 @@
   .btn:active { transform: scale(.97); }
   .btn.ghost { background: #1c2740; color: #9fb2cc; border: 1px solid #2c3c58; }
   .btn.speed { flex: 0 0 58px; }
+  #startBattleBtn { display: none; }
+  #startBattleBtn.show { display: flex; }
 
   #tip { font-size: 11px; color: #6f8199; text-align: center; padding: 4px 12px 10px; min-height: 26px; line-height: 1.5; }
 
@@ -132,6 +136,7 @@
     <div id="shopCtrl">
       <button class="btn ghost" id="rerollBtn">🔄 刷新 <span style="color:#ffd24a">⚡15</span></button>
       <button class="btn speed" id="speedBtn">▶ 1×</button>
+      <button class="btn" id="startBattleBtn">⚔ 开始战斗</button>
     </div>
   </div>
   <div id="tip">放置<b>完全免费</b>。开局中间仅<b>预留格(绿)</b>可摆细胞；刷出的<b>「格子」卡有不同形状</b>（1格/横2格/竖2格/各种3格），必须整块放入深色空缺才能开通。已有细胞可<b>拖动</b>。红细胞在<b>每波结束</b>结算能量（用于刷新）。</div>
@@ -237,6 +242,7 @@ const LEVEL = {
   ],
 };
 const BAL = { baseTemp:37.0, failTemp:42.0, tempPerLeak:0.45, coolPerSec:0.25, redEnergyPer:15, waveGap:4.0, startEnergy:40 };
+const PREP_TIME = 30;   // 开局准备期（秒）：玩家可布防，倒计时归零或点「开始战斗」提前结束
 
 // ---------- 画布尺寸（1:1 像素，无 DPR 缩放） ----------
 const CELL = 48;
@@ -267,14 +273,16 @@ function newGame(){
     towers: [], viruses: [],
     energy: BAL.startEnergy, temp: BAL.baseTemp,
     waveIdx: 0, spawnLeft: 0, spawnTimer: 0, waveGapTimer: 0.8,
-    phase: 'wave',
+    phase: 'prep', prepTimer: PREP_TIME,
     shop: [], selected: -1,
     speed: 1, running: false,
     projectiles: [], floaters: [],
   };
   for(const p of LEVEL.preplaced) placeTower(p.type, p.col, p.row, true);
   rollShop();
-  startWave(0);
+  // 进入准备期：玩家布防，倒计时归零或点「开始战斗」进入第一波
+  const sb=document.getElementById('startBattleBtn');
+  if(sb){ sb.classList.add('show'); sb.onclick=()=>{ if(G && G.phase==='prep') startWave(0); }; }
 }
 
 function placeTower(type, col, row){
@@ -300,6 +308,93 @@ function canPlace(type,col,row){
     if(G.grid[r][c]!==null) return false;
   }
   return true;
+}
+
+// 把点击格(c,r)解析为 size×size 塔的合法「左上角锚点」。
+// 在“能让点击格落在 footprint 内”的所有候选锚点中，优先让 footprint 中心
+// 落在点击格附近；同分则偏向右下角（ac+ar 更大），使点击偏右下时塔也落在右下，
+// 避免 2×2 替换/摆放时新塔总是跳到左上角。
+function anchorFor(type, c, r){
+  // 1×1 也必须经过 canPlace 校验：锁定暗格 / 被占用格不可落，不能无条件返回点击格。
+  // 调用方在“移动自身塔”时应先临时移出该塔再调用，使其自身占格被视为空。
+  const s = CELLS[type].size;
+  const tAc = c - (s-1)/2, tAr = r - (s-1)/2;
+  let best=null, bestScore=1e9, bestSum=-1e9;
+  for(let dr=0; dr<s; dr++) for(let dc=0; dc<s; dc++){
+    const ac=c-dc, ar=r-dr;
+    if(!canPlace(type, ac, ar)) continue;
+    const score = Math.abs(ac - tAc) + Math.abs(ar - tAr);
+    const sum = ac + ar;
+    if(score < bestScore || (score===bestScore && sum > bestSum)){
+      bestScore=score; bestSum=sum; best={ ac, ar };
+    }
+  }
+  return best;
+}
+
+// 对「移动/交换」场景：把点击格(c,r)解析为合法左上角锚点，并允许临时顶掉该 footprint 内其他塔。
+// 返回 { anchor:{ac,ar}, targets:Tower[] }，找不到返回 null。targets 为需要被顶掉的场上塔（已去重）。
+function anchorForWithEvict(type, c, r, exclude){
+  const s = CELLS[type].size;
+  const tAc = c - (s-1)/2, tAr = r - (s-1)/2;
+  let best=null, bestScore=1e9, bestSum=-1e9, bestTargets=[];
+  for(let dr=0; dr<s; dr++) for(let dc=0; dc<s; dc++){
+    const ac=c-dc, ar=r-dr;
+    if(!grid_in(ac, ar) || !grid_in(ac+s-1, ar+s-1)) continue;
+    let inside=true;
+    for(let ddr=0; ddr<s; ddr++) for(let ddc=0; ddc<s; ddc++){
+      const cc=ac+ddc, rr=ar+ddr;
+      if(cc<1 || cc>LEVEL.cols-2 || rr<1 || rr>LEVEL.rows-2){ inside=false; break; }
+    }
+    if(!inside) continue;
+    const targets = collectTowersInFootprint(type, ac, ar, exclude);
+    for(const target of targets) removeTowerFromGrid(target);
+    let ok=true;
+    for(let ddr=0; ddr<s; ddr++) for(let ddc=0; ddc<s; ddc++){
+      if(G.grid[ar+ddr][ac+ddc] !== null){ ok=false; break; }
+    }
+    for(const target of targets) restoreTowerToGrid(target);
+    if(!ok) continue;
+    const score = Math.abs(ac - tAc) + Math.abs(ar - tAr);
+    const sum = ac + ar;
+    if(score < bestScore || (score===bestScore && sum > bestSum)){
+      bestScore=score; bestSum=sum; best={ac, ar}; bestTargets=targets;
+    }
+  }
+  return best ? { anchor: best, targets: bestTargets } : null;
+}
+
+// 细胞卡落子失败原因：返回 null 表示可放，否则返回具体中文原因（区分暗格 vs 占位）
+function placeFailReason(type,col,row){
+  const d = CELLS[type];
+  for(let dr=0;dr<d.size;dr++)for(let dc=0;dc<d.size;dc++){
+    const c=col+dc, r=row+dr;
+    if(!grid_in(c,r)) return '超出棋盘边界';
+    if(c<1||c>LEVEL.cols-2||r<1||r>LEVEL.rows-2) return '不能放在外圈通道上';
+    const g = G.grid[r][c];
+    if(g===null) continue;                          // 已开通空格，OK
+    if(typeof g==='object') return '该格已被其他细胞占用（先移走它）';
+    if(g==='locked') return '该格是暗格，需用「格子卡」开通后才能摆细胞';
+    return '该格不可摆放';
+  }
+  return null;
+}
+
+// 移动已有塔的失败原因（其自身当前占格视为 OK，避免误报“已被占用”）
+function moveFailReason(t,col,row){
+  const d = CELLS[t.type];
+  for(let dr=0;dr<d.size;dr++)for(let dc=0;dc<d.size;dc++){
+    const c=col+dc, r=row+dr;
+    if(!grid_in(c,r)) return '超出棋盘边界';
+    if(c<1||c>LEVEL.cols-2||r<1||r>LEVEL.rows-2) return '不能放在外圈通道上';
+    const g = G.grid[r][c];
+    if(g===null) continue;
+    if(g===t) continue;                            // 自身当前占格，OK
+    if(typeof g==='object') return '目标位置与其他细胞重叠（先移走它）';
+    if(g==='locked') return '目标位置含暗格，需用「格子卡」开通';
+    return '目标位置不可摆放';
+  }
+  return null;
 }
 
 // 格子卡单格检查：是锁定暗格？
@@ -330,6 +425,7 @@ function rollShop(){ G.shop = [pickTileShape(), weightedPick(), weightedPick(), 
 
 // ---------- 波次 ----------
 function startWave(i){
+  const sb=document.getElementById('startBattleBtn'); if(sb) sb.classList.remove('show');
   const w = LEVEL.waves[i];
   G.waveIdx=i; G.spawnLeft=w.count; G.spawnTimer=0; G.phase='wave';
   // 注意：波次开始【不】自动刷新商店——卡池只在用户主动点「刷新⚡15」时重roll
@@ -369,6 +465,13 @@ function step(dt){
   _lastDt = dt;
   _stepCount++;
   if(_stepCount<=3) console.log(`[step #${_stepCount}] dt=${dt.toFixed(4)} phase=${G.phase} spawnLeft=${G.spawnLeft} viruses=${G.viruses.length} running=${G.running}`);
+  // 准备期：仅倒计时，不出怪不结算
+  if(G.phase==='prep'){
+    G.prepTimer -= dt;
+    if(G.prepTimer<=0){ startWave(0); }
+    updateHUD();
+    return;
+  }
   // 出怪
   if(G.phase==='wave'){
     const w=LEVEL.waves[G.waveIdx];
@@ -531,11 +634,14 @@ function render(){
           }
         }
       }
-    } else if(typeof item==='string' && hoverCell && canPlace(item,hoverCell.c,hoverCell.r)){
-      const d=CELLS[item]; const cx=(hoverCell.c+d.size/2)*CELL, cy=(hoverCell.r+d.size/2)*CELL;
-      if(d.range>0){ ctx.fillStyle='rgba(108,200,255,.10)'; ctx.strokeStyle='rgba(108,200,255,.5)'; ctx.lineWidth=1.5;
-        ctx.beginPath(); ctx.arc(cx,cy,d.range*CELL,0,7); ctx.fill(); ctx.stroke(); }
-      ctx.fillStyle='rgba(108,200,255,.25)'; ctx.fillRect(hoverCell.c*CELL+2,hoverCell.r*CELL+2,d.size*CELL-4,d.size*CELL-4);
+    } else if(typeof item==='string' && hoverCell){
+      const a = anchorFor(item, hoverCell.c, hoverCell.r);
+      if(a){
+        const d=CELLS[item]; const cx=(a.ac+d.size/2)*CELL, cy=(a.ar+d.size/2)*CELL;
+        if(d.range>0){ ctx.fillStyle='rgba(108,200,255,.10)'; ctx.strokeStyle='rgba(108,200,255,.5)'; ctx.lineWidth=1.5;
+          ctx.beginPath(); ctx.arc(cx,cy,d.range*CELL,0,7); ctx.fill(); ctx.stroke(); }
+        ctx.fillStyle='rgba(108,200,255,.25)'; ctx.fillRect(a.ac*CELL+2,a.ar*CELL+2,d.size*CELL-4,d.size*CELL-4);
+      }
     }
   }
 
@@ -543,13 +649,38 @@ function render(){
   for(const t of G.towers) drawTower(t);
   // 拖动预览
   if(drag && drag.moved && drag.hoverC!=null){
-    const t=drag.tower, d=CELLS[t.type];
-    const valid = grid_in(drag.hoverC,drag.hoverR) && canPlace(t.type,drag.hoverC,drag.hoverR) && (drag.hoverC!==t.col||drag.hoverR!==t.row);
-    const gx=drag.hoverC*CELL, gy=drag.hoverR*CELL, gs=d.size*CELL;
-    ctx.fillStyle = valid?'rgba(108,200,255,.30)':'rgba(239,68,68,.30)';
+    const isShop = drag.kind==='shop';
+    const type = isShop ? drag.type : drag.tower.type;
+    const t = isShop ? null : drag.tower;
+    const d=CELLS[type];
+    // 与真实落点一致：拖场上塔 / 拖商店卡到占用格 → 可顶掉(anchorForWithEvict)；
+    // 拖商店卡到空格 → 普通摆放(anchorFor，不顶掉)。
+    const hoverOcc = G.grid[drag.hoverR] && G.grid[drag.hoverR][drag.hoverC];
+    const useEvict = !isShop || (hoverOcc && typeof hoverOcc==='object');
+    let valid, isSwap=false, ax, ay;
+    if(t) removeTowerFromGrid(t);
+    if(useEvict){
+      const ev = anchorForWithEvict(type, drag.hoverC, drag.hoverR, t);
+      valid = !!ev;
+      isSwap = !!ev && ev.targets.length>0;
+      ax = ev ? ev.anchor.ac : drag.hoverC;
+      ay = ev ? ev.anchor.ar : drag.hoverR;
+    } else {
+      const a = anchorFor(type, drag.hoverC, drag.hoverR);
+      valid = !!a;
+      ax = a ? a.ac : drag.hoverC;
+      ay = a ? a.ar : drag.hoverR;
+    }
+    if(t) restoreTowerToGrid(t);
+    const gx=ax*CELL, gy=ay*CELL, gs=d.size*CELL;
+    ctx.fillStyle = valid ? (isSwap?'rgba(250,204,21,.32)':'rgba(108,200,255,.30)') : 'rgba(239,68,68,.30)';
     ctx.fillRect(gx+3,gy+3,gs-6,gs-6);
-    if(d.range>0){ ctx.strokeStyle=valid?'rgba(108,200,255,.6)':'rgba(239,68,68,.6)'; ctx.lineWidth=1.5;
+    if(d.range>0){ ctx.strokeStyle= valid ? (isSwap?'rgba(250,204,21,.7)':'rgba(108,200,255,.6)') : 'rgba(239,68,68,.6)'; ctx.lineWidth=1.5;
       ctx.beginPath(); ctx.arc(gx+gs/2,gy+gs/2,d.range*CELL,0,7); ctx.stroke(); }
+    if(isSwap){
+      ctx.fillStyle='rgba(250,204,21,.95)'; ctx.font='bold 13px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('⇄', gx+gs/2, gy-9);
+    }
   }
   // 选中塔射程
   if(showRangeTower){ const t=showRangeTower,d=CELLS[t.type]; if(d.range>0){ const c=towerCenter(t);
@@ -566,6 +697,16 @@ function render(){
   // 飘字
   for(const f of G.floaters){ ctx.globalAlpha=Math.min(1,f.life*1.4); ctx.fillStyle=f.color;
     ctx.font='bold 13px sans-serif'; ctx.textAlign='center'; ctx.fillText(f.txt,f.x*CELL,f.y*CELL); ctx.globalAlpha=1; }
+
+  // 准备期大倒计时（半透明覆盖在棋盘上）
+  if(G.phase==='prep'){
+    ctx.fillStyle='rgba(5,7,13,.45)'; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#ffd24a'; ctx.font='bold 70px sans-serif';
+    ctx.fillText(Math.ceil(G.prepTimer), cv.width/2, cv.height/2 - 16);
+    ctx.fillStyle='#e6edf3'; ctx.font='bold 18px sans-serif';
+    ctx.fillText('布防阶段', cv.width/2, cv.height/2 + 34);
+  }
 
   // ★ 调试信息（临时，确认后删除）
   if(G){
@@ -622,7 +763,11 @@ function roundLabel(){
 }
 function updateHUD(){
   document.getElementById('chapterVal').textContent = LEVEL.chapterName;
-  document.getElementById('waveVal').textContent = roundLabel();
+  if(G.phase==='prep'){
+    document.getElementById('waveVal').textContent = Math.ceil(G.prepTimer)+'s';
+  } else {
+    document.getElementById('waveVal').textContent = roundLabel();
+  }
   document.getElementById('energyVal').textContent = Math.floor(G.energy);
   const t=G.temp; document.getElementById('tempVal').textContent = t.toFixed(1)+'°';
   const pct = (t-BAL.baseTemp)/(BAL.failTemp-BAL.baseTemp)*100;
@@ -654,6 +799,7 @@ function renderShop(){
     const row=document.getElementById('shopRow');
     if(!row){ console.error('[renderShop] #shopRow not found!'); return; }
     row.innerHTML='';
+    row.classList.toggle('scroll', G.shop.length>4);
     if(!G||!G.shop){ console.error('[renderShop] G or G.shop missing'); return; }
     let usedCount=0;
     G.shop.forEach((item,i)=>{
@@ -673,12 +819,13 @@ function renderShop(){
         const d=CELLS[item];
         el.className='slot'+(G.selected===i?' sel':'');
         el.innerHTML=`<div class="ico" style="background:${d.color}">${d.short}</div><div class="nm">${d.name}</div><div class="cost free">免费</div>`;
-        el.onclick=()=>selectSlot(i);
+        el.style.cursor='grab'; el.style.touchAction='none';
+        el.addEventListener('pointerdown', ev=>startShopDrag(i, ev));   // 细胞卡：可拖到棋盘（拖到占用格→交换，§8.2）
       }
       row.appendChild(el);
     });
-    // 整池用尽 → 提示刷新
-    if(usedCount===G.shop.length && G.shop.length>0){
+    // 整池用尽（splice 后无 null，改用 length===0 判）
+    if(G.shop.length===0){
       tip('卡池已用尽，点「刷新⚡15」获取新一批卡');
     }
   } catch(e) {
@@ -712,33 +859,65 @@ function cvXY(e){
 cv.addEventListener('mousemove',e=>{ hoverCell=cvXY(e); });
 cv.addEventListener('mouseleave',()=>{ hoverCell=null; if(drag){ drag.hoverC=null; drag.hoverR=null; } });
 
-// 在已有塔上按下 → 进入潜在拖动
+// 在已有塔上按下 → 进入潜在拖动（移动已有塔）
 cv.addEventListener('pointerdown',e=>{
   if(!G||!G.running) return;
   const {c,r}=cvXY(e); if(!grid_in(c,r)) return;
+  // 即使已选商店卡，也允许在塔上按下并拖动，便于“选卡→拖动场上塔移动”。
+  // 如果未拖动，pointerup 会根据 G.selected 状态交给 handleTap 或显示范围。
   const cell=G.grid[r][c];
   if(cell && typeof cell==='object'){
-    drag={ tower:cell, moved:false, sx:e.clientX, sy:e.clientY, hoverC:c, hoverR:r };
+    drag={ kind:'tower', tower:cell, moved:false, sx:e.clientX, sy:e.clientY, hoverC:c, hoverR:r };
     try{ cv.setPointerCapture(e.pointerId); }catch(_){}
     e.preventDefault();
   }
 });
-cv.addEventListener('pointermove',e=>{
+
+// 商店细胞卡拖拽起点（在 renderShop 里给细胞卡槽绑定 pointerdown）
+function startShopDrag(i, e){
+  if(!G||!G.running) return;
+  const item=G.shop[i];
+  if(item===null || (typeof item==='object' && item.cells)) return; // 空槽/格子卡不拖
+  drag={ kind:'shop', slotIdx:i, type:item, moved:false, sx:e.clientX, sy:e.clientY, hoverC:null, hoverR:null };
+  e.preventDefault();
+}
+
+// 全局 pointermove / pointerup 统一处理：移动塔 / 拖商店卡 / 点击落子
+document.addEventListener('pointermove', e=>{
   if(!drag) return;
-  if(Math.hypot(e.clientX-drag.sx, e.clientY-drag.sy)>6) drag.moved=true;
-  const {c,r}=cvXY(e); drag.hoverC=c; drag.hoverR=r;
+  if(drag.kind==='tower'){
+    if(Math.hypot(e.clientX-drag.sx, e.clientY-drag.sy)>6) drag.moved=true;
+    const {c,r}=cvXY(e); drag.hoverC=c; drag.hoverR=r;
+  } else if(drag.kind==='shop'){
+    const {c,r}=cvXY(e); drag.hoverC=c; drag.hoverR=r;
+    if(Math.hypot(e.clientX-drag.sx, e.clientY-drag.sy)>6) drag.moved=true;
+  }
 });
-cv.addEventListener('pointerup',e=>{
+document.addEventListener('pointerup', e=>{
   if(!drag){ handleTap(e); return; }
   const d=drag; drag=null;
-  const t=d.tower;
-  if(d.moved){
+  if(d.kind==='tower'){
+    if(d.moved){
+      const {c,r}=cvXY(e);
+      console.log('[PU] drag-tower', d.tower.type, d.tower.col, d.tower.row, '→', c, r);
+      const result = tryMoveOrSwap(d.tower, c, r);
+      console.log('[PU] result', result);
+      if(result.msg) tip(result.msg);
+    } else if(G.selected>=0){
+      // 已选商店卡且未拖动：交给点选逻辑（替换/摆放）
+      handleTap(e);
+    } else {
+      showRangeTower = (showRangeTower===d.tower)?null:d.tower;
+    }
+  } else if(d.kind==='shop'){
+    if(!d.moved){ selectSlot(d.slotIdx); return; }   // 仅点选（不移动）→ 进入点选摆位模式
     const {c,r}=cvXY(e);
-    if(grid_in(c,r) && canPlace(t.type,c,r) && (c!==t.col||r!==t.row)){
-      moveTower(t,c,r); tip('已移动「'+CELLS[t.type].name+'」');
-    } else { tip(canPlace(t.type,c,r)?'位置没变':'这里放不下，已归位'); }
-  } else {
-    showRangeTower = (showRangeTower===t)?null:t;
+    if(!grid_in(c,r)){ tip('拖出棋盘外，已取消'); return; }
+    const item=G.shop[d.slotIdx];
+    if(item===null || (typeof item==='object' && item.cells)){ tip('卡片已失效'); return; }
+    const type=item;
+    console.log('[PU] drag-shop', type, '→', c, r);
+    trySwap(d.slotIdx, type, c, r);   // 统一：空格→摆放，塔上/塔旁→顶掉
   }
 });
 cv.addEventListener('pointercancel',()=>{ drag=null; });
@@ -756,7 +935,7 @@ function handleTap(e){
         for(const [dc,dr] of item.cells){
           G.grid[r+dr][c+dc] = null;  // locked → null (已开通)
         }
-        G.shop[G.selected]=null;   // 放置后该槽清空（不自动补，用完整池需点刷新）
+        G.shop.splice(G.selected,1);   // 消耗格子卡（用一张少一张，刷新才补）
         G.selected=-1; renderShop(); updateHUD();
         tip(`开通了 ${item.name} 格（${item.size} 格），现在可以往上摆细胞了`);
       } else {
@@ -780,14 +959,9 @@ function handleTap(e){
       }
       return;
     }
-    // 放细胞卡
-    const type=item, d=CELLS[type];
-    if(canPlace(type,c,r)){
-      placeTower(type,c,r,false);
-      G.shop[G.selected]=null;   // 放置后该槽清空（不自动补，用完整池需点刷新）
-      G.selected=-1; renderShop(); updateHUD();
-      tip('摆放「'+d.name+'」成功（免费）');
-    } else tip('只能放中间已开通的绿色空格');
+    // 放细胞卡：统一 anchorForWithEvict（空格→摆放，覆盖塔→顶掉）
+    const type=item;
+    trySwap(G.selected, type, c, r);
     return;
   }
   // 点击已有塔 → 显示射程
@@ -803,6 +977,140 @@ function moveTower(t,c,r){
   for(let dr=0;dr<d.size;dr++)for(let dc=0;dc<d.size;dc++) G.grid[r+dr][c+dc]=t;
 }
 
+function removeTowerFromGrid(t){
+  for(let dr=0;dr<t.size;dr++)for(let dc=0;dc<t.size;dc++) G.grid[t.row+dr][t.col+dc]=null;
+}
+function restoreTowerToGrid(t){
+  for(let dr=0;dr<t.size;dr++)for(let dc=0;dc<t.size;dc++) G.grid[t.row+dr][t.col+dc]=t;
+}
+function hasFreeShopSlot(excludeIdx){
+  if(excludeIdx===undefined) excludeIdx=-1;
+  for(let i=0;i<G.shop.length;i++) if(i!==excludeIdx && G.shop[i]===null) return true;
+  return false;
+}
+function findFreeShopSlot(excludeIdx){
+  if(excludeIdx===undefined) excludeIdx=-1;
+  for(let i=0;i<G.shop.length;i++) if(i!==excludeIdx && G.shop[i]===null) return i;
+  return -1;
+}
+
+// 收集 type-size  footprint (c,r) 覆盖到的所有场上塔（可排除某座塔）
+function collectTowersInFootprint(type, c, r, exclude){
+  const s = CELLS[type].size;
+  const set = new Set();
+  for(let dr=0; dr<s; dr++){
+    for(let dc=0; dc<s; dc++){
+      const gr = r + dr, gc = c + dc;
+      if(grid_in(gc, gr)){
+        const occ = G.grid[gr][gc];
+        if(occ && typeof occ==='object' && occ!==exclude) set.add(occ);
+      }
+    }
+  }
+  return [...set];
+}
+
+// 移动已有塔；若拖到另一座塔 footprint 上，则直接顶掉并退回商店空槽（§8.2 的场上延伸）
+function tryMoveOrSwap(t, c, r){
+  removeTowerFromGrid(t);
+  const res = anchorForWithEvict(t.type, c, r, t);
+  if(!res){
+    restoreTowerToGrid(t);
+    const reason = moveFailReason(t, c, r);
+    console.log('[MV] FAIL', t.type, t.col, t.row, '→', c, r, '|', reason);
+    return { ok:false, msg:'目标位置无法摆放：'+(reason||'周围被占用或超出范围') };
+  }
+  const { anchor:a, targets } = res;
+  // 没动：新落点就是原位，且没有顶掉任何塔
+  if(a.ac===t.col && a.ar===t.row && targets.length===0){
+    restoreTowerToGrid(t);
+    console.log('[MV] NOOP 位置没变', t.type, t.col, t.row);
+    return { ok:false, msg:'位置没变' };
+  }
+  // 互换：仅一座同尺寸目标塔且落点对齐它 → 两塔互换位置，不退回商店
+  if(targets.length===1 && targets[0].size===t.size && a.ac===targets[0].col && a.ar===targets[0].row){
+    const other = targets[0];
+    const oldAc = t.col, oldAr = t.row;          // A 原位
+    removeTowerFromGrid(other);                   // 临时腾空 B 位
+    if(canPlace(other.type, oldAc, oldAr)){       // B 能落 A 原位
+      t.col = a.ac; t.row = a.ar;                 // A → B 位
+      for(let dr=0;dr<t.size;dr++)for(let dc=0;dc<t.size;dc++) G.grid[a.ar+dr][a.ac+dc]=t;
+      other.col = oldAc; other.row = oldAr;       // B → A 原位
+      for(let dr=0;dr<other.size;dr++)for(let dc=0;dc<other.size;dc++) G.grid[oldAr+dr][oldAc+dc]=other;
+      console.log('[MV] SWAP', t.type, '@', a.ac, a.ar, '↔', other.type, '@', oldAc, oldAr);
+      renderShop(); updateHUD();
+      return { ok:true, swapped:true, msg:'' };
+    }
+    restoreTowerToGrid(other);                    // 互换不成，恢复 B，走顶掉
+  }
+  console.log('[MV] OK', t.type, '→', a.ac, a.ar, 'top=', targets.map(x=>x.type+'@'+x.col+','+x.row));
+  // 被覆盖的塔：优先挪到 source 原位腾出的空格，挪不下的才退回商店
+  const oldAc=t.col, oldAr=t.row;
+  for(const target of targets) removeTowerFromGrid(target);
+  moveTower(t, a.ac, a.ar);           // source 落新位（清原位）
+  // source 原位腾出格 = 原位 footprint 中不在新位 footprint 的部分
+  const freed=[];
+  for(let dr=0;dr<t.size;dr++)for(let dc=0;dc<t.size;dc++){
+    const cc=oldAc+dc, rr=oldAr+dr;
+    let inNew=false;
+    for(let ddr=0;ddr<t.size;ddr++)for(let ddc=0;ddc<t.size;ddc++){
+      if(a.ac+ddc===cc && a.ar+ddr===rr){ inNew=true; break; }
+    }
+    if(!inNew && grid_in(cc,rr) && cc>=1&&cc<=LEVEL.cols-2&&rr>=1&&rr<=LEVEL.rows-2) freed.push([cc,rr]);
+  }
+  const toShop=[];
+  for(const target of targets){
+    let placed=false;
+    if(target.size===1){                // 1×1 小塔：找腾出空格放下
+      for(let i=0;i<freed.length;i++){
+        const [cc,rr]=freed[i];
+        if(G.grid[rr][cc]===null){
+          target.col=cc; target.row=rr;
+          G.grid[rr][cc]=target;
+          freed.splice(i,1);
+          placed=true;
+          break;
+        }
+      }
+    }
+    if(!placed) toShop.push(target);    // 2×2 或腾出格已满 → 退回商店
+  }
+  G.towers = G.towers.filter(x=>!toShop.includes(x));
+  for(const target of toShop){
+    const slot = findFreeShopSlot();
+    if(slot>=0) G.shop[slot]=target.type;
+    else G.shop.push(target.type);
+  }
+  renderShop(); updateHUD();
+  return { ok:true, swapped: targets.length>0, msg:'' };
+}
+// 触发：任何时候都允许；边界：仅细胞卡 / 顶回塔保留类型（L1 无等级）
+function trySwap(slotIdx, newType, c, r){
+  console.log('[SW]', slotIdx, newType, '→', c, r);
+  // 统一 anchorForWithEvict：空格→摆放(targets=[])，覆盖塔→顶掉(targets=[塔])
+  const res = anchorForWithEvict(newType, c, r, null);
+  if(!res){
+    const reason = placeFailReason(newType, c, r);
+    console.log('[SW] FAIL', reason);
+    tip('放不下：'+(reason||'目标位置周围被占用（暗格或越界）'));
+    return;
+  }
+  console.log('[SW] OK →', res.anchor, 'top=', res.targets.map(x=>x.type+'@'+x.col+','+x.row));
+  const { anchor:a, targets } = res;
+  for(const target of targets) removeTowerFromGrid(target);
+  G.towers = G.towers.filter(t=>!targets.includes(t));
+  placeTower(newType, a.ac, a.ar);
+  G.shop.splice(slotIdx,1);   // 消耗新卡（splice 紧凑，用一张少一张）
+  for(const target of targets){
+    const slot = findFreeShopSlot();
+    if(slot>=0) G.shop[slot]=target.type;
+    else G.shop.push(target.type);
+  }
+  G.selected=-1;
+  renderShop(); updateHUD();
+}
+
+// ---------- 商店渲染（含格子卡形状预览）----------
 document.getElementById('rerollBtn').onclick=()=>{
   if(G.energy<15){ tip('能量不够刷新'); return; }
   G.energy-=15;
@@ -833,7 +1141,7 @@ function loop(ts){
   let dt=(ts-lastT)/1000; lastT=ts;
   dt=Math.min(dt,0.05)*G.speed;
   _gameTime += dt;
-  if(G.phase==='wave'||G.phase==='gap') {
+  if(G.phase==='wave'||G.phase==='gap'||G.phase==='prep') {
     try { step(dt); } catch(e) {
       console.error('[step] CRASH @ t='+_gameTime.toFixed(2)+'s:', e.message, e.stack);
       G.running = false;
