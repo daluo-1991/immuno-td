@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>免疫塔防 · L1 可玩原型</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    background: #05070d; color: #e6edf3;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: flex; justify-content: center; min-height: 100vh;
+    user-select: none;
+  }
+  #app {
+    width: 100%; max-width: 430px; position: relative;
+    display: flex; flex-direction: column;
+    background: radial-gradient(ellipse at 50% 25%, #101827 0%, #05070d 70%);
+  }
+
+  /* ===== 顶部 HUD ===== */
+  #hud {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px 8px; position: relative; z-index: 5;
+  }
+  .stat {
+    flex: 1; background: #131c2b; border: 1px solid #223049;
+    border-radius: 10px; padding: 6px 8px; text-align: center;
+  }
+  .stat .label { font-size: 10px; color: #7d8ca3; letter-spacing: 1px; }
+  .stat .val { font-size: 17px; font-weight: 700; margin-top: 1px; }
+  #energyVal { color: #ffd24a; }
+  #waveVal { color: #6cc8ff; }
+
+  /* 体温条 */
+  #tempWrap { flex: 1.4; }
+  #tempBar {
+    height: 10px; margin-top: 4px; border-radius: 6px; overflow: hidden;
+    background: #0a1018; border: 1px solid #223049; position: relative;
+  }
+  #tempFill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #10b981 0%, #eab308 55%, #ef4444 100%);
+    transition: width .15s linear;
+  }
+  #tempVal { color: #ff8a5c; }
+
+  /* ===== 画布 ===== */
+  #stage { position: relative; align-self: center; margin-top: 2px; }
+  canvas { display: block; border-radius: 12px; touch-action: none; border: 2px solid #3a5070; }
+  /* 发烧火光 vignette */
+  #fever {
+    position: absolute; inset: 0; border-radius: 12px; pointer-events: none;
+    box-shadow: inset 0 0 0px 0px rgba(239,68,68,0); opacity: 0;
+    transition: opacity .3s;
+  }
+
+  /* ===== 商店 ===== */
+  #shop { padding: 8px 12px 6px; }
+  #shopRow { display: flex; gap: 7px; min-height: 78px; }
+  .slot {
+    flex: 1; min-height: 72px; border-radius: 11px; padding: 5px 2px;
+    background: #131c2b; border: 1.5px solid #263650;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; cursor: pointer; position: relative; transition: transform .08s, border-color .1s;
+  }
+  .slot:active { transform: scale(.94); }
+  .slot.sel { border-color: #ffd24a; box-shadow: 0 0 0 2px rgba(255,210,74,.3); }
+  .slot.disabled { opacity: .4; }
+  .slot.empty { background: #0c1220; border-style: dashed; border-color: #1c2740; cursor: default; }
+  .slot.empty:active { transform: none; }
+  .slot .empty-mark { font-size: 11px; color: #3d4a5f; }
+  .slot .ico { width: 30px; height: 30px; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:#fff; }
+  .slot .nm { font-size: 10px; color: #c4d0e0; }
+  .slot .cost { font-size: 11px; font-weight: 700; color: #ffd24a; }
+  .slot .cost.free::before { content: ""; }
+
+  /* 格子卡形状预览（小 SVG 网格） */
+  .tile-preview {
+    display: inline-grid; gap: 1px;
+    background: #334155; padding: 2px; border-radius: 4px;
+    width: 30px; height: 30px;
+  }
+  .tile-preview .tp-cell { background: #94a3b8; border-radius: 1px; }
+
+  #shopCtrl { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  .btn {
+    flex: 1; padding: 9px; border-radius: 10px; border: none; cursor: pointer;
+    font-size: 13px; font-weight: 700; color: #05070d; background: #ffd24a;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn.ghost { background: #1c2740; color: #9fb2cc; border: 1px solid #2c3c58; }
+  .btn.speed { flex: 0 0 58px; }
+
+  #tip { font-size: 11px; color: #6f8199; text-align: center; padding: 4px 12px 10px; min-height: 26px; line-height: 1.5; }
+
+  /* ===== 遮罩 ===== */
+  #overlay {
+    position: absolute; inset: 0; z-index: 20; display: flex;
+    flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(5,7,13,.88); backdrop-filter: blur(4px); text-align: center; padding: 24px;
+  }
+  #overlay.hide { display: none; }
+  #overlay h1 { font-size: 26px; margin-bottom: 8px; }
+  #overlay p { font-size: 13px; color: #9fb2cc; line-height: 1.7; margin-bottom: 20px; max-width: 300px; }
+  #overlay .big { font-size: 15px; padding: 12px 34px; flex: none; border-radius: 12px; }
+  .em { color: #ffd24a; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- HUD -->
+  <div id="hud">
+    <div class="stat"><div class="label">章节</div><div class="val" id="chapterVal">第 1 章</div></div>
+    <div class="stat"><div class="label">轮次</div><div class="val" id="waveVal">1/8</div></div>
+    <div class="stat"><div class="label">能量</div><div class="val" id="energyVal">40</div></div>
+    <div class="stat" id="tempWrap">
+      <div class="label">体温 <span id="tempVal">37.0°</span></div>
+      <div id="tempBar"><div id="tempFill"></div></div>
+    </div>
+  </div>
+
+  <!-- 画布 -->
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="fever"></div>
+  </div>
+
+  <!-- 商店 -->
+  <div id="shop">
+    <div id="shopRow"></div>
+    <div id="shopCtrl">
+      <button class="btn ghost" id="rerollBtn">🔄 刷新 <span style="color:#ffd24a">⚡15</span></button>
+      <button class="btn speed" id="speedBtn">▶ 1×</button>
+    </div>
+  </div>
+  <div id="tip">放置<b>完全免费</b>。开局中间仅<b>预留格(绿)</b>可摆细胞；刷出的<b>「格子」卡有不同形状</b>（1格/横2格/竖2格/各种3格），必须整块放入深色空缺才能开通。已有细胞可<b>拖动</b>。红细胞在<b>每波结束</b>结算能量（用于刷新）。</div>
+
+  <!-- 开始/结算遮罩 -->
+  <div id="overlay">
+    <h1>🦠 免疫塔防 L1</h1>
+    <p>病毒从<span class="em">左上角</span>入侵，沿外圈行进，从<span class="em">右上角</span>逃逸进入身体。<br>漏怪越多体温越高，<span class="em">到 42° 就发烧失败</span>。<br>每章 <span class="em">8 轮</span>小怪，<span class="em">第 4 轮后出 1 个 BOSS</span>。在中间格子摆放免疫细胞拦住它们！</p>
+    <button class="btn big" id="startBtn">开始防御</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   免疫塔防 L1 可玩原型 v4
+   7×9 总画布 · 外环 C 形路径 · 内格 5×7 摆位区
+   多形状格子卡系统（1格×1 / 2格×2 / 3格×6）
+   ============================================================ */
+
+// ---------- 细胞配置 ----------
+const CELLS = {
+  neutrophil: { name:'中性粒', short:'中', role:'basic',    cost:20, dps:12, range:3.0, atkSpeed:1.2, size:1, color:'#3b82f6' },
+  macrophage: { name:'巨噬',   short:'噬', role:'aoe',      cost:30, dps:9,  range:3.0, atkSpeed:1.0, size:2, color:'#a855f7', aoe:1.5, slow:0.3 },
+  tcell:      { name:'T细胞',  short:'T', role:'sniper',    cost:35, dps:30, range:5.0, atkSpeed:0.5, size:1, color:'#ef4444' },
+  antibody:   { name:'抗体',   short:'抗', role:'debuff',   cost:30, dps:0,  range:4.0, atkSpeed:1.0, size:1, color:'#f59e0b', debuff:1.5 },
+  nk:         { name:'NK',    short:'NK', role:'fast',      cost:28, dps:18, range:3.0, atkSpeed:2.0, size:1, color:'#22c55e' },
+  interferon: { name:'干扰素', short:'扰', role:'aura',     cost:40, dps:0,  range:4.0, atkSpeed:1.0, size:2, color:'#06b6d4', aura:1.3 },
+  memory:     { name:'记忆',   short:'记', role:'intel',    cost:45, dps:0,  range:0,   atkSpeed:1.0, size:2, color:'#8b5cf6' },
+  redcell:    { name:'红细胞', short:'红', role:'economic', cost:10, dps:0,  range:0,   energyRate:2, size:1, color:'#dc2626' },
+};
+const SHOP_POOL = ['neutrophil','macrophage','tcell','antibody','nk','interferon','memory','redcell'];
+const WEIGHTS   = { neutrophil:11.86,macrophage:11.86,tcell:11.86,antibody:11.86,nk:11.86,interferon:11.86,memory:11.86,redcell:17 };
+
+const MATRIX = {
+  rhinovirus:{ neutrophil:1.0, macrophage:1.0, tcell:0.8, antibody:1.6, nk:1.0, interferon:1.0, memory:1.0 },
+};
+const VIRUSES = {
+  rhinovirus:{ name:'感冒病毒', hp:50,  speed:0.5,  color:'#a3e635' },
+  boss1:{      name:'变异体',   hp:450, speed:0.32, color:'#c084fc', boss:true },
+  boss2:{      name:'超级病毒', hp:900, speed:0.28, color:'#ef4444', boss:true },
+};
+
+// ---------- 格子卡形状定义 ----------
+// 每个 shape = { name, cells: [[dc,dr], ...] } 相对偏移
+// 1格：1种 | 2格：2种(横/竖) | 3格：6种(所有自由三格骨牌朝向)
+const TILE_SHAPES = [
+  // ── 1 格（1 种）──
+  { name:'1格', size:1, weight: 40, cells:[[0,0]] },
+  // ── 2 格（2 种）──
+  { name:'横2', size:2, weight: 18, cells:[[0,0],[1,0]] },
+  { name:'竖2', size:2, weight: 18, cells:[[0,0],[0,1]] },
+  // ── 3 格（6 种）──
+  { name:'横3',     size:3, weight: 6, cells:[[0,0],[1,0],[2,0]] },
+  { name:'竖3',     size:3, weight: 6, cells:[[0,0],[0,1],[0,2]] },
+  { name:'L└',      size:3, weight: 4, cells:[[0,0],[1,0],[0,1]] },
+  { name:'L┌',      size:3, weight: 4, cells:[[0,0],[-1,0],[0,1]] },  // 归一化后等价于[0,0],[1,0],[1,-1]
+  { name:'L┘',      size:3, weight: 4, cells:[[0,0],[1,0],[1,1]] },
+  { name:'L┐',      size:3, weight: 4, cells:[[0,0],[-1,0],[-1,1]] },
+];
+// 预计算每种形状的总权重和累积分布（用于加权随机抽取）
+let _tileWeightTotal = 0;
+const _tileCumul = [];
+(function initTileWeights(){
+  for(const t of TILE_SHAPES){ _tileWeightTotal += t.weight; _tileCumul.push(_tileWeightTotal); }
+})();
+
+function pickTileShape(){
+  const x = Math.random() * _tileWeightTotal;
+  for(let i=0;i<TILE_SHAPES.length;i++){ if(x<=_tileCumul[i]) return TILE_SHAPES[i]; }
+  return TILE_SHAPES[0];
+}
+
+// ---------- L1 关卡（7×9 总画布，外环路径，内 5×7 摆位区） ----------
+// 坐标系：col 0-6(左→右), row 0-8(上→下)
+// 外圈(col 0/col 6/row 0/row 8)=病毒通道 | 内格(col 1-5, row 1-7)=5×7 摆位区
+const LEVEL = {
+  cols: 7, rows: 9,
+  chapterName:'第 1 章',   // 当前关卡归属章节（多章系统后续接入）
+  roundTotal:8,           // 每章 8 轮小怪（BOSS 不算轮）
+  entrance:{col:0,row:0}, exit:{col:6,row:0},
+  // C 形路径：左侧列下 → 底边横跨 → 右侧列上
+  path:[
+    [0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[0,8],
+    [1,8],[2,8],[3,8],[4,8],[5,8],[6,8],
+    [6,7],[6,6],[6,5],[6,4],[6,3],[6,2],[6,1],[6,0]
+  ],
+  // 不预置任何细胞：开局只留 reserved 预留格（可摆位但空），细胞全靠玩家从商店自摆
+  preplaced:[],
+  // 开局即开通的预留格（3×3 簇，居中于 5×7 摆位区）
+  reserved:[ [2,3],[3,3],[4,3], [2,4],[3,4],[4,4], [2,5],[3,5],[4,5] ],
+  // 章内节奏：8 轮小怪，第 4 轮小怪清空后跟 1 个 BOSS，之后第 5~8 轮纯小怪
+  // waves 数组顺序：轮1..轮4(小) → BOSS → 轮5..轮8(小) ＝ 共 9 个出怪事件
+  waves:[
+    { virus:'rhinovirus', count:5,  interval:3.0 },  // 第1轮
+    { virus:'rhinovirus', count:6,  interval:2.6 },  // 第2轮
+    { virus:'rhinovirus', count:7,  interval:2.2 },  // 第3轮
+    { virus:'rhinovirus', count:7,  interval:2.0 },  // 第4轮（小怪，BOSS 在其后）
+    { virus:'boss1',       count:1,  interval:2.0, isBoss:true },   // 第4轮后：BOSS1
+    { virus:'rhinovirus', count:8,  interval:2.0 },  // 第5轮
+    { virus:'rhinovirus', count:9,  interval:1.8 },  // 第6轮
+    { virus:'rhinovirus', count:10, interval:1.6 },  // 第7轮
+    { virus:'rhinovirus', count:12, interval:1.4 },  // 第8轮
+  ],
+};
+const BAL = { baseTemp:37.0, failTemp:42.0, tempPerLeak:0.45, coolPerSec:0.25, redEnergyPer:15, waveGap:4.0, startEnergy:40 };
+
+// ---------- 画布尺寸（1:1 像素，无 DPR 缩放） ----------
+const CELL = 48;
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+cv.width = LEVEL.cols*CELL; cv.height = LEVEL.rows*CELL;
+cv.style.width = cv.width+'px'; cv.style.height = cv.height+'px';
+document.getElementById('fever').style.width = cv.width+'px';
+document.getElementById('fever').style.height = cv.height+'px';
+
+// ---------- 游戏状态 ----------
+let G = null;
+function keyOf(c,r){ return c+','+r; }
+
+function newGame(){
+  const pathSet = new Set(LEVEL.path.map(p=>keyOf(p[0],p[1])));
+  const grid = [];
+  for(let r=0;r<LEVEL.rows;r++) grid.push(new Array(LEVEL.cols).fill(null));
+  for(const p of LEVEL.path) grid[p[1]][p[0]] = 'path';
+  // 摆位区默认锁定('locked')，仅预留格开局开通
+  const reservedSet = new Set((LEVEL.reserved||[]).map(p=>keyOf(p[0],p[1])));
+  for(let r=0;r<LEVEL.rows;r++)for(let c=0;c<LEVEL.cols;c++){
+    const inner = c>=1&&c<=LEVEL.cols-2&&r>=1&&r<=LEVEL.rows-2;  // col 1-5, row 1-7
+    if(inner && !reservedSet.has(keyOf(c,r))) grid[r][c] = 'locked';
+  }
+
+  G = {
+    grid, pathSet,
+    towers: [], viruses: [],
+    energy: BAL.startEnergy, temp: BAL.baseTemp,
+    waveIdx: 0, spawnLeft: 0, spawnTimer: 0, waveGapTimer: 0.8,
+    phase: 'wave',
+    shop: [], selected: -1,
+    speed: 1, running: false,
+    projectiles: [], floaters: [],
+  };
+  for(const p of LEVEL.preplaced) placeTower(p.type, p.col, p.row, true);
+  rollShop();
+  startWave(0);
+}
+
+function placeTower(type, col, row){
+  const d = CELLS[type];
+  const t = { type, col, row, size:d.size, cd:0, target:null };
+  G.towers.push(t);
+  for(let dr=0;dr<d.size;dr++)for(let dc=0;dc<d.size;dc++){
+    if(grid_in(col+dc,row+dr)) G.grid[row+dr][col+dc] = t;
+  }
+  return t;
+}
+function grid_in(c,r){ return c>=0&&c<LEVEL.cols&&r>=0&&r<LEVEL.rows; }
+
+// ---------- 合法性判定 ----------
+
+// 细胞摆放：size×size 全在内格摆位区且为已开通空格(null)
+function canPlace(type,col,row){
+  const d = CELLS[type];
+  for(let dr=0;dr<d.size;dr++)for(let dc=0;dc<d.size;dc++){
+    const c=col+dc, r=row+dr;
+    if(!grid_in(c,r)) return false;
+    if(c<1||c>LEVEL.cols-2||r<1||r>LEVEL.rows-2) return false;
+    if(G.grid[r][c]!==null) return false;
+  }
+  return true;
+}
+
+// 格子卡单格检查：是锁定暗格？
+function isLockedCell(c,r){
+  if(!grid_in(c,r)) return false;
+  const inner = c>=1&&c<=LEVEL.cols-2&&r>=1&&r<=LEVEL.rows-2;
+  return inner && G.grid[r][c]==='locked';
+}
+
+// 格子卡整体可放置？shape 的每一格都必须是锁定暗格且不越界
+function canPlaceTileShape(shape, col, row){
+  for(const [dc,dr] of shape.cells){
+    const c = col+dc, r = row+dr;
+    if(!isLockedCell(c,r)) return false;
+  }
+  return true;
+}
+
+// ---------- 商店 ----------
+function weightedPick(){
+  let tot=0; for(const k of SHOP_POOL) tot+=WEIGHTS[k];
+  let x=Math.random()*tot;
+  for(const k of SHOP_POOL){ x-=WEIGHTS[k]; if(x<=0) return k; }
+  return SHOP_POOL[0];
+}
+// 商店：首槽恒为格子卡（随机形状），其余 3 槽为细胞卡
+function rollShop(){ G.shop = [pickTileShape(), weightedPick(), weightedPick(), weightedPick()]; G.selected=-1; renderShop(); }
+
+// ---------- 波次 ----------
+function startWave(i){
+  const w = LEVEL.waves[i];
+  G.waveIdx=i; G.spawnLeft=w.count; G.spawnTimer=0; G.phase='wave';
+  // 注意：波次开始【不】自动刷新商店——卡池只在用户主动点「刷新⚡15」时重roll
+  if(w.isBoss){
+    tip('⚠️ 第 4 轮清场！BOSS「'+VIRUSES[w.virus].name+'」来袭！血厚速慢，集火！');
+  }
+  updateHUD();
+}
+function spawnVirus(type){
+  const v = VIRUSES[type];
+  G.viruses.push({ type, hp:v.hp, maxhp:v.hp, prog:0, speed:v.speed, vuln:1.0, slowT:0 });
+}
+
+// ---------- 战斗核心 ----------
+function towerCenter(t){ return { x:(t.col + t.size/2), y:(t.row + t.size/2) }; }
+function virusPos(v){
+  const path=LEVEL.path; const seg=Math.floor(v.prog);
+  if(seg>=path.length-1){ const p=path[path.length-1]; return {x:p[0]+0.5,y:p[1]+0.5}; }
+  const a=path[seg], b=path[seg+1], t=v.prog-seg;
+  return { x:a[0]+(b[0]-a[0])*t+0.5, y:a[1]+(b[1]-a[1])*t+0.5 };
+}
+function dist(ax,ay,bx,by){ return Math.hypot(ax-bx,ay-by); }
+
+function auraBuff(t){
+  let atk=1, spd=1;
+  const c=towerCenter(t);
+  for(const o of G.towers){
+    if(o===t || CELLS[o.type].role!=='aura') continue;
+    const oc=towerCenter(o);
+    if(dist(c.x,c.y,oc.x,oc.y) <= CELLS[o.type].range){ atk*=CELLS[o.type].aura; spd*=CELLS[o.type].aura; }
+  }
+  return {atk,spd};
+}
+
+let _lastDt=0, _stepCount=0;
+function step(dt){
+  _lastDt = dt;
+  _stepCount++;
+  if(_stepCount<=3) console.log(`[step #${_stepCount}] dt=${dt.toFixed(4)} phase=${G.phase} spawnLeft=${G.spawnLeft} viruses=${G.viruses.length} running=${G.running}`);
+  // 出怪
+  if(G.phase==='wave'){
+    const w=LEVEL.waves[G.waveIdx];
+    if(G.spawnLeft>0){
+      G.spawnTimer-=dt;
+      if(G.spawnTimer<=0){ spawnVirus(w.virus); G.spawnLeft--; G.spawnTimer=w.interval; }
+    } else if(G.viruses.length===0){
+      // 本波清空 → 结算红细胞产能
+      const reds = G.towers.filter(t=>CELLS[t.type].role==='economic').length;
+      if(reds>0){
+        const gain = reds*BAL.redEnergyPer;
+        G.energy += gain;
+        addFloater((1+LEVEL.cols)/2, 0.5, '红细胞产能 +'+gain+'⚡', '#ffd24a');
+        tip(reds+' 个红细胞结算能量 +'+gain);
+      }
+      if(G.waveIdx>=LEVEL.waves.length-1){ G.phase='win'; endGame(true); return; }
+      G.phase='gap'; G.waveGapTimer=BAL.waveGap;
+    }
+  } else if(G.phase==='gap'){
+    G.waveGapTimer-=dt;
+    if(G.waveGapTimer<=0) startWave(G.waveIdx+1);
+  }
+
+  // 病毒移动
+  for(const v of G.viruses){
+    let sp=v.speed;
+    if(v.slowT>0){ v.slowT-=dt; sp*=0.7; }
+    v.prog += sp*dt;
+    if(v.prog >= LEVEL.path.length-1){ v.leaked=true; }
+  }
+  // 处理漏怪
+  const leaked = G.viruses.filter(v=>v.leaked);
+  if(leaked.length){
+    for(const v of leaked){
+      const add = VIRUSES[v.type].boss ? 1.5 : BAL.tempPerLeak;  // BOSS 漏掉体温暴涨
+      G.temp += add;
+      addFloater(LEVEL.exit.col+0.5, LEVEL.exit.row+0.5, '+'+add.toFixed(1)+'°', '#ff5c5c');
+    }
+    G.viruses = G.viruses.filter(v=>!v.leaked);
+  }
+  // 体温自然下降
+  G.temp = Math.max(BAL.baseTemp, G.temp - BAL.coolPerSec*dt);
+  if(G.temp >= BAL.failTemp){ G.temp=BAL.failTemp; G.phase='lose'; endGame(false); return; }
+
+  // 塔攻击
+  for(const t of G.towers){
+    const d=CELLS[t.type];
+    if(d.role==='economic'||d.role==='intel'||d.range<=0) continue;
+    t.cd -= dt;
+    const c=towerCenter(t);
+    const buff = auraBuff(t);
+    if(d.role==='debuff'){
+      for(const v of G.viruses){ const vp=virusPos(v); if(dist(c.x,c.y,vp.x,vp.y)<=d.range) v.vuln=Math.max(v.vuln,d.debuff); }
+      continue;
+    }
+    if(d.role==='aura') continue;
+    if(t.cd>0) continue;
+    let best=null,bestProg=-1;
+    for(const v of G.viruses){ const vp=virusPos(v); if(dist(c.x,c.y,vp.x,vp.y)<=d.range && v.prog>bestProg){ best=v; bestProg=v.prog; } }
+    if(best){
+      const interval = 1/(d.atkSpeed*buff.spd);
+      t.cd = interval;
+      const perShot = (d.dps/d.atkSpeed) * buff.atk;
+      dealDamage(best, perShot, t);
+      if(d.role==='aoe'){
+        const bp=virusPos(best);
+        for(const v of G.viruses){ if(v===best) continue; const vp=virusPos(v); if(dist(bp.x,bp.y,vp.x,vp.y)<=d.aoe){ dealDamage(v, perShot*0.6, t); if(d.slow) v.slowT=0.8; } }
+        if(d.slow) best.slowT=0.8;
+      }
+      const bp=virusPos(best);
+      G.projectiles.push({ x0:c.x,y0:c.y, x1:bp.x,y1:bp.y, life:0.12, color:d.color });
+    }
+  }
+  // 清除死亡病毒
+  G.viruses = G.viruses.filter(v=>{ if(v.hp<=0){ addFloater(virusPos(v).x, virusPos(v).y, '✔', '#7dd3fc'); return false; } return true; });
+
+  // 特效衰减
+  for(const p of G.projectiles) p.life-=dt;
+  G.projectiles = G.projectiles.filter(p=>p.life>0);
+  for(const f of G.floaters){ f.life-=dt; f.y-=dt*0.6; }
+  G.floaters = G.floaters.filter(f=>f.life>0);
+
+  updateHUD();
+}
+
+function dealDamage(v, base, t){
+  const m = (MATRIX[v.type] && MATRIX[v.type][t.type]) || 1.0;
+  v.hp -= base * m * v.vuln;
+}
+function addFloater(x,y,txt,color){ G.floaters.push({x,y,txt,color,life:0.9}); }
+
+// ---------- 渲染 ----------
+function render(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  // 未初始化 → 显示等待画面
+  if(!G){
+    ctx.fillStyle='#1a2332'; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.fillStyle='#64748b'; ctx.font='14px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('点击「开始防御」', cv.width/2, cv.height/2);
+    return;
+  }
+
+  // 背景（深蓝灰——必须与格子有区分度）
+  ctx.fillStyle='#162030'; ctx.fillRect(0,0,LEVEL.cols*CELL,LEVEL.rows*CELL);
+
+  // 格子
+  for(let r=0;r<LEVEL.rows;r++)for(let c=0;c<LEVEL.cols;c++){
+    const x=c*CELL, y=r*CELL, cell=G.grid[r][c];
+    const onPath = G.pathSet.has(keyOf(c,r));
+    if(onPath){
+      // 病毒路径：暖棕色（像木板）
+      ctx.fillStyle='#5a3d20'; ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
+      ctx.strokeStyle='#8b6914'; ctx.lineWidth=1.5; ctx.strokeRect(x+2,y+2,CELL-4,CELL-4);
+    } else if(cell==='locked'){
+      // 锁定暗格：深蓝 + 粗虚线框 + 「+」号
+      ctx.fillStyle='#223048'; ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
+      ctx.strokeStyle='#4a6090'; ctx.lineWidth=1.5; ctx.setLineDash([4,4]); ctx.strokeRect(x+2,y+2,CELL-4,CELL-4); ctx.setLineDash([]);
+      ctx.strokeStyle='#7090c0'; ctx.lineWidth=2.5;
+      ctx.beginPath();
+      ctx.moveTo(x+CELL/2-8,y+CELL/2); ctx.lineTo(x+CELL/2+8,y+CELL/2);
+      ctx.moveTo(x+CELL/2,y+CELL/2-8); ctx.lineTo(x+CELL/2,y+CELL/2+8); ctx.stroke();
+    } else {
+      const inner = c>=1&&c<=LEVEL.cols-2&&r>=1&&r<=LEVEL.rows-2;
+      // 已开通绿格（明显可见的绿色）
+      ctx.fillStyle = inner ? '#1a4030' : '#162030';
+      ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
+      if(inner){ ctx.strokeStyle='#30a060'; ctx.lineWidth=2; ctx.strokeRect(x+1.5,y+1.5,CELL-3,CELL-3); }
+    }
+  }
+  // 入口/出口标记
+  drawEndpoint(LEVEL.entrance,'#ef4444','入');
+  drawEndpoint(LEVEL.exit,'#f97316','出');
+
+  // 路径行进箭头（淡）
+  ctx.fillStyle='rgba(255,180,80,.30)';
+  for(let i=0;i<LEVEL.path.length-1;i+=1){
+    const a=LEVEL.path[i], b=LEVEL.path[i+1];
+    const mx=(a[0]+b[0])/2+0.5, my=(a[1]+b[1])/2+0.5;
+    ctx.beginPath(); ctx.arc(mx*CELL,my*CELL,4,0,7); ctx.fill();
+  }
+
+  // 摆放预览
+  if(G.selected>=0){
+    const item=G.shop[G.selected];
+    if(typeof item==='object' && item.cells){
+      // 选中的格子卡：预览形状覆盖范围
+      if(hoverCell && canPlaceTileShape(item, hoverCell.c, hoverCell.r)){
+        for(const [dc,dr] of item.cells){
+          const gc=hoverCell.c+dc, gr=hoverCell.r+dr;
+          ctx.fillStyle='rgba(108,200,255,.28)'; ctx.fillRect(gc*CELL+2,gr*CELL+2,CELL-4,CELL-4);
+          ctx.strokeStyle='rgba(108,200,255,.6)'; ctx.lineWidth=1.5; ctx.strokeRect(gc*CELL+3.5,gr*CELL+3.5,CELL-7,CELL-7);
+        }
+      } else if(hoverCell){
+        // 放不下时红色提示
+        for(const [dc,dr] of item.cells){
+          const gc=hoverCell.c+dc, gr=hoverCell.r+dr;
+          if(grid_in(gc,gr)){
+            ctx.fillStyle='rgba(239,68,68,.18)'; ctx.fillRect(gc*CELL+2,gr*CELL+2,CELL-4,CELL-4);
+            ctx.strokeStyle='rgba(239,68,68,.4)'; ctx.lineWidth=1; ctx.strokeRect(gc*CELL+3,gr*CELL+3,CELL-7,CELL-7);
+          }
+        }
+      }
+    } else if(typeof item==='string' && hoverCell && canPlace(item,hoverCell.c,hoverCell.r)){
+      const d=CELLS[item]; const cx=(hoverCell.c+d.size/2)*CELL, cy=(hoverCell.r+d.size/2)*CELL;
+      if(d.range>0){ ctx.fillStyle='rgba(108,200,255,.10)'; ctx.strokeStyle='rgba(108,200,255,.5)'; ctx.lineWidth=1.5;
+        ctx.beginPath(); ctx.arc(cx,cy,d.range*CELL,0,7); ctx.fill(); ctx.stroke(); }
+      ctx.fillStyle='rgba(108,200,255,.25)'; ctx.fillRect(hoverCell.c*CELL+2,hoverCell.r*CELL+2,d.size*CELL-4,d.size*CELL-4);
+    }
+  }
+
+  // 塔
+  for(const t of G.towers) drawTower(t);
+  // 拖动预览
+  if(drag && drag.moved && drag.hoverC!=null){
+    const t=drag.tower, d=CELLS[t.type];
+    const valid = grid_in(drag.hoverC,drag.hoverR) && canPlace(t.type,drag.hoverC,drag.hoverR) && (drag.hoverC!==t.col||drag.hoverR!==t.row);
+    const gx=drag.hoverC*CELL, gy=drag.hoverR*CELL, gs=d.size*CELL;
+    ctx.fillStyle = valid?'rgba(108,200,255,.30)':'rgba(239,68,68,.30)';
+    ctx.fillRect(gx+3,gy+3,gs-6,gs-6);
+    if(d.range>0){ ctx.strokeStyle=valid?'rgba(108,200,255,.6)':'rgba(239,68,68,.6)'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(gx+gs/2,gy+gs/2,d.range*CELL,0,7); ctx.stroke(); }
+  }
+  // 选中塔射程
+  if(showRangeTower){ const t=showRangeTower,d=CELLS[t.type]; if(d.range>0){ const c=towerCenter(t);
+    ctx.fillStyle='rgba(255,210,74,.08)'; ctx.strokeStyle='rgba(255,210,74,.45)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(c.x*CELL,c.y*CELL,d.range*CELL,0,7); ctx.fill(); ctx.stroke(); } }
+
+  // 抛射线
+  for(const p of G.projectiles){ ctx.strokeStyle=p.color; ctx.lineWidth=2; ctx.globalAlpha=p.life/0.12;
+    ctx.beginPath(); ctx.moveTo(p.x0*CELL,p.y0*CELL); ctx.lineTo(p.x1*CELL,p.y1*CELL); ctx.stroke(); ctx.globalAlpha=1; }
+
+  // 病毒
+  for(const v of G.viruses) drawVirus(v);
+
+  // 飘字
+  for(const f of G.floaters){ ctx.globalAlpha=Math.min(1,f.life*1.4); ctx.fillStyle=f.color;
+    ctx.font='bold 13px sans-serif'; ctx.textAlign='center'; ctx.fillText(f.txt,f.x*CELL,f.y*CELL); ctx.globalAlpha=1; }
+
+  // ★ 调试信息（临时，确认后删除）
+  if(G){
+    ctx.fillStyle='rgba(255,255,255,.85)'; ctx.font='11px monospace'; ctx.textAlign='left';
+    const dbg = `F=${_frameCount} t=${_gameTime.toFixed(1)}s phase=${G.phase||'?'} spawnLeft=${G.spawnLeft??'?'} shop=${G.shop?.length||0} viruses=${G.viruses.length} run=${G.running} dt_last=${(_lastDt||0).toFixed(3)}`;
+    ctx.fillText(dbg, 4, LEVEL.rows*CELL - 6);
+  }
+}
+
+function drawEndpoint(p,color,txt){
+  const x=p.col*CELL, y=p.row*CELL;
+  ctx.fillStyle=color+'55'; ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
+  ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.strokeRect(x+3,y+3,CELL-6,CELL-6);
+  ctx.fillStyle=color; ctx.font='bold 14px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(txt,x+CELL/2,y+CELL/2);
+}
+function drawTower(t){
+  const d=CELLS[t.type]; const px=t.col*CELL, py=t.row*CELL, sz=d.size*CELL;
+  const cx=px+sz/2, cy=py+sz/2, r=sz*0.36;
+  ctx.fillStyle=d.color+'66'; roundRect(px+3,py+3,sz-6,sz-6,8); ctx.fill();
+  ctx.fillStyle=d.color; ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.fill();
+  ctx.strokeStyle='#ffffff55'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.fillStyle='#fff'; ctx.font='bold '+(d.size>1?15:13)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(d.short,cx,cy);
+}
+function drawVirus(v){
+  const p=virusPos(v); const x=p.x*CELL, y=p.y*CELL; const vc=VIRUSES[v.type];
+  const isBoss = !!vc.boss;
+  const r = isBoss ? 19 : 11;
+  ctx.fillStyle=vc.color; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+  ctx.strokeStyle=vc.color; ctx.lineWidth= isBoss?3:2; ctx.stroke();
+  for(let a=0;a<6;a++){ const ang=a/6*Math.PI*2; ctx.beginPath(); ctx.moveTo(x+Math.cos(ang)*r,y+Math.sin(ang)*r); ctx.lineTo(x+Math.cos(ang)*(r+(isBoss?7:4)),y+Math.sin(ang)*(r+(isBoss?7:4))); ctx.stroke(); }
+  if(isBoss){
+    // BOSS 王冠标记
+    ctx.fillStyle='#ffd24a'; ctx.font='bold 14px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('★', x, y-2);
+  } else {
+    ctx.fillStyle='#05070d'; ctx.beginPath(); ctx.arc(x-3.5,y-1,2,0,7); ctx.arc(x+3.5,y-1,2,0,7); ctx.fill();
+  }
+  if(v.vuln>1){ ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(x,y,r+6,0,7); ctx.stroke(); }
+  const w = isBoss?42:22, hp=Math.max(0,v.hp/v.maxhp);
+  const by = isBoss ? y-r-14 : y-r-9;
+  ctx.fillStyle='#000a'; ctx.fillRect(x-w/2,by,w,4);
+  ctx.fillStyle= hp>0.5?'#22c55e':hp>0.25?'#eab308':'#ef4444'; ctx.fillRect(x-w/2,by,w*hp,4);
+}
+function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+// ---------- HUD ----------
+// 轮次标签：小怪轮显示 1~8/8，BOSS 事件显示 BOSS
+function roundLabel(){
+  const i=G.waveIdx, w=LEVEL.waves[i];
+  if(w && w.isBoss) return 'BOSS';
+  return (i>=5 ? i : i+1)+'/'+LEVEL.roundTotal;
+}
+function updateHUD(){
+  document.getElementById('chapterVal').textContent = LEVEL.chapterName;
+  document.getElementById('waveVal').textContent = roundLabel();
+  document.getElementById('energyVal').textContent = Math.floor(G.energy);
+  const t=G.temp; document.getElementById('tempVal').textContent = t.toFixed(1)+'°';
+  const pct = (t-BAL.baseTemp)/(BAL.failTemp-BAL.baseTemp)*100;
+  document.getElementById('tempFill').style.width = Math.max(0,Math.min(100,pct))+'%';
+  const fever=document.getElementById('fever');
+  const glow=Math.max(0,Math.min(1,(t-38)/(BAL.failTemp-38)));
+  fever.style.opacity=glow;
+  fever.style.boxShadow=`inset 0 0 ${40*glow}px ${18*glow}px rgba(239,68,68,${0.55*glow})`;
+  document.getElementById('rerollBtn').classList.toggle('disabled', G.energy<15);
+}
+
+// ---------- 商店渲染（含格子卡形状预览）----------
+function buildTilePreview(shape){
+  // 计算 bounding box
+  let minC=0,maxC=0,minR=0,maxR=0;
+  for(const [dc,dr] of shape.cells){ minC=Math.min(minC,dc); maxC=Math.max(maxC,dc); minR=Math.min(minR,dr); maxR=Math.max(maxR,dr); }
+  const w=maxC-minC+1, h=maxR-minR+1;
+  const cellSz = Math.floor(26/Math.max(w,h)); // 缩放到 26px 以内
+  let html = `<div class="tile-preview" style="grid-template-columns:repeat(${w},${cellSz}px);grid-template-rows:repeat(${h},${cellSz}px)">`;
+  const filled = new Set(shape.cells.map(([dc,dr])=>(dc-minC)+','+(dr-minR)));
+  for(let rr=0;rr<h;rr++)for(let cc=0;cc<w;cc++){
+    html += `<div class="tp-cell"${filled.has(cc+','+rr)?'':' style="background:#334155"'}></div>`;
+  }
+  return html+'</div>';
+}
+
+function renderShop(){
+  try {
+    const row=document.getElementById('shopRow');
+    if(!row){ console.error('[renderShop] #shopRow not found!'); return; }
+    row.innerHTML='';
+    if(!G||!G.shop){ console.error('[renderShop] G or G.shop missing'); return; }
+    let usedCount=0;
+    G.shop.forEach((item,i)=>{
+      const el=document.createElement('div');
+      if(item===null){
+        // 已用掉的空槽（不自动补，需点刷新才出新卡池）
+        el.className='slot empty';
+        el.innerHTML=`<div class="empty-mark">已用</div>`;
+        usedCount++;
+      } else if(typeof item==='object' && item.cells){
+        // 格子卡：显示形状预览
+        el.className='slot'+(G.selected===i?' sel':'');
+        el.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:30px">${buildTilePreview(item)}</div>`
+          +`<div class="nm">${item.name}格</div><div class="cost free">免费</div>`;
+        el.onclick=()=>selectSlot(i);
+      } else {
+        const d=CELLS[item];
+        el.className='slot'+(G.selected===i?' sel':'');
+        el.innerHTML=`<div class="ico" style="background:${d.color}">${d.short}</div><div class="nm">${d.name}</div><div class="cost free">免费</div>`;
+        el.onclick=()=>selectSlot(i);
+      }
+      row.appendChild(el);
+    });
+    // 整池用尽 → 提示刷新
+    if(usedCount===G.shop.length && G.shop.length>0){
+      tip('卡池已用尽，点「刷新⚡15」获取新一批卡');
+    }
+  } catch(e) {
+    console.error('[renderShop] CRASH:', e.message, e.stack);
+  }
+}
+
+function selectSlot(i){
+  const item=G.shop[i];
+  if(item===null) return;  // 空槽不可选
+  G.selected = G.selected===i?-1:i; renderShop();
+  if(G.selected>=0){
+    if(typeof item==='object' && item.cells)
+      tip(`已选「${item.name}格」卡，点深色空缺区域整块放入（形状内的每格都必须是空的暗格）`);
+    else
+      tip(`已选「${CELLS[item].name}」，点绿色空格摆放（免费）`);
+  } else {
+    tip('');
+  }
+}
+function tip(s){ document.getElementById('tip').textContent = s || '点格子卡→点暗格区域开通；或点细胞卡→点绿格摆放。'; }
+
+// ---------- 交互 ----------
+let hoverCell=null, showRangeTower=null, drag=null;
+function cvXY(e){
+  const rect=cv.getBoundingClientRect();
+  const cxp=(e.touches?e.touches[0].clientX:e.clientX)-rect.left;
+  const cyp=(e.touches?e.touches[0].clientY:e.clientY)-rect.top;
+  return { c:Math.floor(cxp/CELL), r:Math.floor(cyp/CELL) };
+}
+cv.addEventListener('mousemove',e=>{ hoverCell=cvXY(e); });
+cv.addEventListener('mouseleave',()=>{ hoverCell=null; if(drag){ drag.hoverC=null; drag.hoverR=null; } });
+
+// 在已有塔上按下 → 进入潜在拖动
+cv.addEventListener('pointerdown',e=>{
+  if(!G||!G.running) return;
+  const {c,r}=cvXY(e); if(!grid_in(c,r)) return;
+  const cell=G.grid[r][c];
+  if(cell && typeof cell==='object'){
+    drag={ tower:cell, moved:false, sx:e.clientX, sy:e.clientY, hoverC:c, hoverR:r };
+    try{ cv.setPointerCapture(e.pointerId); }catch(_){}
+    e.preventDefault();
+  }
+});
+cv.addEventListener('pointermove',e=>{
+  if(!drag) return;
+  if(Math.hypot(e.clientX-drag.sx, e.clientY-drag.sy)>6) drag.moved=true;
+  const {c,r}=cvXY(e); drag.hoverC=c; drag.hoverR=r;
+});
+cv.addEventListener('pointerup',e=>{
+  if(!drag){ handleTap(e); return; }
+  const d=drag; drag=null;
+  const t=d.tower;
+  if(d.moved){
+    const {c,r}=cvXY(e);
+    if(grid_in(c,r) && canPlace(t.type,c,r) && (c!==t.col||r!==t.row)){
+      moveTower(t,c,r); tip('已移动「'+CELLS[t.type].name+'」');
+    } else { tip(canPlace(t.type,c,r)?'位置没变':'这里放不下，已归位'); }
+  } else {
+    showRangeTower = (showRangeTower===t)?null:t;
+  }
+});
+cv.addEventListener('pointercancel',()=>{ drag=null; });
+
+// 点击空位：落子
+function handleTap(e){
+  e.preventDefault();
+  const {c,r}=cvXY(e); if(!grid_in(c,r)) return;
+  if(G.selected>=0){
+    const item=G.shop[G.selected];
+    if(typeof item==='object' && item.cells){
+      // 放格子卡：整块形状必须全落在锁定暗格上
+      if(canPlaceTileShape(item, c, r)){
+        // 一次性开通所有被形状覆盖的格子
+        for(const [dc,dr] of item.cells){
+          G.grid[r+dr][c+dc] = null;  // locked → null (已开通)
+        }
+        G.shop[G.selected]=null;   // 放置后该槽清空（不自动补，用完整池需点刷新）
+        G.selected=-1; renderShop(); updateHUD();
+        tip(`开通了 ${item.name} 格（${item.size} 格），现在可以往上摆细胞了`);
+      } else {
+        // 具体诊断为什么放不下
+        let reason = '';
+        let outCount=0, notLockedCount=0, occCount=0;
+        for(const [dc,dr] of item.cells){
+          const gc=c+dc, gr=r+dr;
+          if(!grid_in(gc,gr)){ outCount++; continue; }
+          const inner = gc>=1&&gc<=LEVEL.cols-2&&gr>=1&&gr<=LEVEL.rows-2;
+          if(!inner){ outCount++; continue; }
+          if(G.grid[gr][gc]==='locked') continue;
+          if(G.grid[gr][gc]===null){ notLockedCount++; continue; }
+          occCount++;
+        }
+        if(outCount>0) reason='超出边界或放在路径上了';
+        else if(notLockedCount>0) reason='有些格已经开通过了（不需要重复开通）';
+        else if(occCount>0) reason='有些格已被占用（先移走上面的细胞）';
+        else reason='无法放入此位置';
+        tip(reason);
+      }
+      return;
+    }
+    // 放细胞卡
+    const type=item, d=CELLS[type];
+    if(canPlace(type,c,r)){
+      placeTower(type,c,r,false);
+      G.shop[G.selected]=null;   // 放置后该槽清空（不自动补，用完整池需点刷新）
+      G.selected=-1; renderShop(); updateHUD();
+      tip('摆放「'+d.name+'」成功（免费）');
+    } else tip('只能放中间已开通的绿色空格');
+    return;
+  }
+  // 点击已有塔 → 显示射程
+  const cell=G.grid[r][c];
+  if(cell && typeof cell==='object') showRangeTower=(showRangeTower===cell)?null:cell;
+  else showRangeTower=null;
+}
+
+function moveTower(t,c,r){
+  const d=CELLS[t.type];
+  for(let dr=0;dr<t.size;dr++)for(let dc=0;dc<t.size;dc++) G.grid[t.row+dr][t.col+dc]=null;
+  t.col=c; t.row=r;
+  for(let dr=0;dr<d.size;dr++)for(let dc=0;dc<d.size;dc++) G.grid[r+dr][c+dc]=t;
+}
+
+document.getElementById('rerollBtn').onclick=()=>{
+  if(G.energy<15){ tip('能量不够刷新'); return; }
+  G.energy-=15;
+  // 整个卡池一起刷新（格子卡+细胞卡一起重roll，之前没用掉的格子一并被刷没）
+  rollShop(); updateHUD();
+  tip('卡池已刷新（格子卡跟着一起刷，没用掉的格子会丢失）');
+};
+document.getElementById('speedBtn').onclick=()=>{
+  G.speed = G.speed===1?2 : G.speed===2?4 : 1;
+  document.getElementById('speedBtn').textContent = '▶ '+G.speed+'×';
+};
+
+// ---------- 主循环 ----------
+let lastT=0, _gameTime=0;
+function loop(ts){
+  if(!lastT) lastT = ts;
+  requestAnimationFrame(loop);
+  _frameCount++;
+  // 始终渲染（未开始时显示空棋盘）
+  try { render(); } catch(e) {
+    console.error('[render] CRASH:', e.message, e.stack);
+    const ctx2 = cv.getContext('2d');
+    ctx2.fillStyle='#ff0000'; ctx2.font='14px monospace'; ctx2.textAlign='left';
+    ctx2.fillText('RENDER ERROR: '+e.message, 4, 20);
+    return;
+  }
+  if(!G || !G.running) return;
+  let dt=(ts-lastT)/1000; lastT=ts;
+  dt=Math.min(dt,0.05)*G.speed;
+  _gameTime += dt;
+  if(G.phase==='wave'||G.phase==='gap') {
+    try { step(dt); } catch(e) {
+      console.error('[step] CRASH @ t='+_gameTime.toFixed(2)+'s:', e.message, e.stack);
+      G.running = false;
+      alert('游戏逻辑报错(已暂停):\n'+e.message+'\n位置: step()');
+    }
+  }
+}
+
+// ---------- 结算 ----------
+function endGame(win){
+  G.running=false;
+  const ov=document.getElementById('overlay');
+  ov.classList.remove('hide');
+  const towerCount=G.towers.length;
+  ov.innerHTML = win
+    ? `<h1>🎉 第 1 章通过！</h1><p>8 轮小怪 + 1 个 BOSS 全部拦截。<br>峰值体温 <span class="em">${peakTemp.toFixed(1)}°</span> · 最终摆放 <span class="em">${towerCount}</span> 个细胞。</p><button class="btn big" id="againBtn">再玩一次</button>`
+    : `<h1>🤒 发烧失败</h1><p>体温飙到 <span class="em">42°</span>，病毒攻陷身体。<br>漏怪太多了——试试把塔往<span class="em">出口(右上)侧</span>多摆，或多摆红细胞攒能量堆更多塔。</p><button class="btn big" id="againBtn">再来一次</button>`;
+  document.getElementById('againBtn').onclick=start;
+}
+let peakTemp=37;
+
+// ---------- 启动 ----------
+let _frameCount = 0;
+function start(){
+  document.getElementById('overlay').classList.add('hide');
+  try {
+    newGame();
+    G.running = true;
+    peakTemp = 37;
+    _gameTime = 0;
+    _lastDt = 0;
+    updateHUD();
+    renderShop();
+    // 强制验证
+    console.log('[start] ✅ OK — running:', G.running, 'phase:', G.phase, 'spawnLeft:', G.spawnLeft,
+      'shopLen:', G.shop?.length, 'towers:', G.towers?.length);
+    // 二次保险：下一帧再确认 running（防止被某处异步重置）
+    setTimeout(()=>{
+      if(G && !G.running){
+        console.warn('[start] ⚠️ running 被重置为 false！强制恢复');
+        G.running = true;
+      }
+    }, 100);
+  } catch(e) {
+    console.error('[start] CRASH:', e.message, e.stack);
+    alert('启动报错: '+e.message+'\n'+e.stack);
+  }
+}
+document.getElementById('startBtn').onclick=start;
+
+setInterval(()=>{ if(G&&G.running) peakTemp=Math.max(peakTemp,G.temp); },100);
+
+// ★ 商店自动修复：若 #shopRow 实际子节点数与 G.shop 不符，自动补渲染（防 CSS/时序导致卡片消失）
+setInterval(()=>{
+  if(!G || !G.shop) return;
+  const row = document.getElementById('shopRow');
+  if(!row) return;
+  if(row.childElementCount !== G.shop.length){
+    console.warn('[shop-repair] 检测到 shopRow 子节点数('+row.childElementCount+') ≠ shop长度('+G.shop.length+')，自动重渲染');
+    renderShopSafe();
+  }
+}, 500);
+
+function renderShopSafe(){
+  try { renderShop(); }
+  catch(e){ console.error('[renderShopSafe] 仍失败:', e.message); }
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
