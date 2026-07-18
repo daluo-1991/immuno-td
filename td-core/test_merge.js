@@ -83,7 +83,7 @@ api.trySwap(0,'neutrophil',2,3);                  // 中性粒卡拖到巨噬上
 const neu=G.towers.find(t=>t.type==='neutrophil');
 const mac=G.towers.find(t=>t.type==='macrophage');
 ok('异型不合成：中性粒落子 tier1', neu && neu.tier===1 && neu.col===2 && neu.row===3);
-ok('被顶巨噬回商店', mac===undefined && G.shop.includes('macrophage'));
+ok('被顶巨噬回商店（保留 tier）', mac===undefined && G.shop.some(it=>(it&&typeof it==='object'?it.type:it)==='macrophage'));
 
 api.newGame(0); G=api.getG();
 const t2=api.placeTower('neutrophil',2,3); t2.tier=2;   // 手动设 tier2
@@ -91,7 +91,8 @@ G.shop=['neutrophil','tcell','tcell','tcell']; G.selected=-1;
 api.trySwap(0,'neutrophil',2,3);                  // 商店 tier1 卡拖到 tier2 塔：异级→替换
 const t3=G.towers.find(t=>t.type==='neutrophil'&&t.col===2&&t.row===3);
 ok('异级不合成：新落 tier1 中性粒', t3 && t3.tier===1);
-ok('旧 tier2 塔回商店', G.shop.includes('neutrophil'));
+const back2=G.shop.find(it=>it&&typeof it==='object'&&it.type==='neutrophil');
+ok('旧 tier2 塔回商店且保留 tier=2', back2 && back2.tier===2);
 
 console.log('=== 6. 红细胞合成产能随阶放大 ===');
 const r1=api.eff({type:'redcell',tier:1});

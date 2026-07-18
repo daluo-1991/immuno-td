@@ -324,9 +324,14 @@ function newGame(idx){
   if(sb){ sb.classList.add('show'); sb.onclick=()=>{ if(G && G.phase==='prep') startWave(0); }; }
 }
 
-function placeTower(type, col, row){
+// 商店卡表示：字符串('neutrophil')=tier1；{type,tier}对象=tier>=2（被挤回商店的升级塔）；格子卡{...,cells}
+function isTileCard(it){ return !!(it && typeof it==='object' && it.cells); }
+function cardType(it){ return isTileCard(it) ? null : (typeof it==='object' ? it.type : it); }
+function cardTier(it){ return (it && typeof it==='object' && it.tier) ? it.tier : 1; }
+
+function placeTower(type, col, row, tier){
   const d = CELLS[type];
-  const t = { type, col, row, size:d.size, cd:0, target:null, tier:1 };
+  const t = { type, col, row, size:d.size, cd:0, target:null, tier: tier||1 };
   G.towers.push(t);
   for(let dr=0;dr<d.size;dr++)for(let dc=0;dc<d.size;dc++){
     if(grid_in(col+dc,row+dr)) G.grid[row+dr][col+dc] = t;
@@ -744,7 +749,7 @@ function render(){
   // 摆放预览
   if(G.selected>=0){
     const item=G.shop[G.selected];
-    if(typeof item==='object' && item.cells){
+    if(isTileCard(item)){
       // 选中的格子卡：预览形状覆盖范围
       if(hoverCell && canPlaceTileShape(item, hoverCell.c, hoverCell.r)){
         for(const [dc,dr] of item.cells){
@@ -762,10 +767,11 @@ function render(){
           }
         }
       }
-    } else if(typeof item==='string' && hoverCell){
-      const a = anchorFor(item, hoverCell.c, hoverCell.r);
+    } else if(item && (typeof item==='string' || (typeof item==='object' && item.type)) && hoverCell){
+      const tp=cardType(item);
+      const a = anchorFor(tp, hoverCell.c, hoverCell.r);
       if(a){
-        const d=CELLS[item]; const cx=(a.ac+d.size/2)*CELL, cy=(a.ar+d.size/2)*CELL;
+        const d=CELLS[tp]; const cx=(a.ac+d.size/2)*CELL, cy=(a.ar+d.size/2)*CELL;
         if(d.range>0){ ctx.fillStyle='rgba(108,200,255,.10)'; ctx.strokeStyle='rgba(108,200,255,.5)'; ctx.lineWidth=1.5;
           ctx.beginPath(); ctx.arc(cx,cy,d.range*CELL,0,7); ctx.fill(); ctx.stroke(); }
         ctx.fillStyle='rgba(108,200,255,.25)'; ctx.fillRect(a.ac*CELL+2,a.ar*CELL+2,d.size*CELL-4,d.size*CELL-4);
@@ -778,7 +784,8 @@ function render(){
   // 拖动预览
   if(drag && drag.moved && drag.hoverC!=null){
     const isShop = drag.kind==='shop';
-    const type = isShop ? drag.type : drag.tower.type;
+    const card = isShop ? drag.type : null;
+    const type = isShop ? cardType(card) : drag.tower.type;
     const t = isShop ? null : drag.tower;
     const d = isShop ? CELLS[type] : eff(t);
     // 商店卡：光标即2×2左上角，预览框始终跟光标走（不吸附到别的锚点）。
@@ -796,7 +803,7 @@ function render(){
         if(cc<1||cc>LEVEL.cols-2||rr<1||rr>LEVEL.rows-2){ outOfBounds=true; continue; }
         const v=G.grid[rr] && G.grid[rr][cc];
         if(v==='locked') hasDark=true;
-        else if(v && typeof v==='object'){ hasTower=true; if(v.type===type && (v.tier||1)===1) isMerge=true; }
+        else if(v && typeof v==='object'){ hasTower=true; if(v.type===type && (v.tier||1)===cardTier(card)) isMerge=true; }
       }
       ax = drag.hoverC; ay = drag.hoverR;
       if(outOfBounds || hasDark){ valid=false; }
@@ -973,9 +980,9 @@ function renderShop(){
           +`<div class="nm">${item.name}格</div><div class="cost free">免费</div>`;
         el.onclick=()=>selectSlot(i);
       } else {
-        const d=CELLS[item];
+        const tp=cardType(item), k=cardTier(item), d=CELLS[tp];
         el.className='slot'+(G.selected===i?' sel':'');
-        el.innerHTML=`<div class="ico" style="background:${d.color}">${d.short}</div><div class="nm">${d.name}</div><div class="cost free">免费</div>`;
+        el.innerHTML=`<div class="ico" style="background:${d.color}">${d.short}</div><div class="nm">${d.name}${k>=2?` Lv.${k}`:''}</div><div class="cost free">免费</div>`;
         el.style.cursor='grab'; el.style.touchAction='none';
         el.addEventListener('pointerdown', ev=>startShopDrag(i, ev));   // 细胞卡：可拖到棋盘（拖到占用格→交换，§8.2）
       }
@@ -995,10 +1002,10 @@ function selectSlot(i){
   if(item===null) return;  // 空槽不可选
   G.selected = G.selected===i?-1:i; renderShop();
   if(G.selected>=0){
-    if(typeof item==='object' && item.cells)
+    if(isTileCard(item))
       tip(`已选「${item.name}格」卡，点深色空缺区域整块放入（形状内的每格都必须是空的暗格）`);
     else
-      tip(`已选「${CELLS[item].name}」，点绿色空格摆放（免费）`);
+      tip(`已选「${CELLS[cardType(item)].name}${cardTier(item)>=2?' Lv.'+cardTier(item):''}」，点绿色空格摆放（免费）`);
   } else {
     tip('');
   }
@@ -1034,7 +1041,7 @@ cv.addEventListener('pointerdown',e=>{
 function startShopDrag(i, e){
   if(!G||!G.running) return;
   const item=G.shop[i];
-  if(item===null || (typeof item==='object' && item.cells)) return; // 空槽/格子卡不拖
+  if(item===null || isTileCard(item)) return; // 空槽/格子卡不拖
   drag={ kind:'shop', slotIdx:i, type:item, moved:false, sx:e.clientX, sy:e.clientY, hoverC:null, hoverR:null };
   e.preventDefault();
   try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}  // 锁定指针，避免拖动中被中断/丢事件
@@ -1070,9 +1077,8 @@ document.addEventListener('pointerup', e=>{
     const {c,r}=cvXY(e);
     if(!grid_in(c,r)){ tip('拖出棋盘外，已取消'); return; }
     const item=G.shop[d.slotIdx];
-    if(item===null || (typeof item==='object' && item.cells)){ tip('卡片已失效'); return; }
-    const type=item;
-    trySwap(d.slotIdx, type, c, r);   // 统一：空格→摆放，塔上/塔旁→顶掉
+    if(item===null || isTileCard(item)){ tip('卡片已失效'); return; }
+    trySwap(d.slotIdx, item, c, r);   // 统一：空格→摆放，塔上/塔旁→顶掉/合成
   }
 });
 cv.addEventListener('pointercancel',()=>{ drag=null; });
@@ -1083,7 +1089,7 @@ function handleTap(e){
   const {c,r}=cvXY(e); if(!grid_in(c,r)) return;
   if(G.selected>=0){
     const item=G.shop[G.selected];
-    if(typeof item==='object' && item.cells){
+    if(isTileCard(item)){
       // 放格子卡：整块形状必须全落在锁定暗格上
       if(canPlaceTileShape(item, c, r)){
         // 一次性开通所有被形状覆盖的格子
@@ -1114,9 +1120,8 @@ function handleTap(e){
       }
       return;
     }
-    // 放细胞卡：统一 anchorForWithEvict（空格→摆放，覆盖塔→顶掉）
-    const type=item;
-    trySwap(G.selected, type, c, r);
+    // 放细胞卡：统一 anchorForWithEvict（空格→摆放，覆盖塔→顶掉/合成）
+    trySwap(G.selected, item, c, r);
     return;
   }
   // 点击已有塔 → 显示射程
@@ -1239,8 +1244,9 @@ function tryMoveOrSwap(t, c, r){
   G.towers = G.towers.filter(x=>!toShop.includes(x));
   for(const target of toShop){
     const slot = findFreeShopSlot();
-    if(slot>=0) G.shop[slot]=target.type;
-    else G.shop.push(target.type);
+    const evicted = { type:target.type, tier:target.tier||1 };   // 保留 tier，不丢升级
+    if(slot>=0) G.shop[slot]=evicted;
+    else G.shop.push(evicted);
   }
   renderShop(); updateHUD();
   return { ok:true, swapped: targets.length>0, msg:'' };
@@ -1249,7 +1255,9 @@ function tryMoveOrSwap(t, c, r){
 //   - 光标位 footprint 内有塔 → 顶掉(回商店)，新卡落子
 //   - 光标位 footprint 全空(绿格) → 直接落子
 //   - 光标位 footprint 含暗格/越界 → 退商店（不消耗）
-function trySwap(slotIdx, newType, c, r){
+function trySwap(slotIdx, card, c, r){
+  const newType = cardType(card);
+  const newTier = cardTier(card);
   const d = CELLS[newType];
   const s = d.size;
 
@@ -1277,8 +1285,8 @@ function trySwap(slotIdx, newType, c, r){
     return;
   }
 
-  // ②b 合成优先（§7 合成主线）：商店卡 tier1 落到“同型同级”场上塔 → 合成升阶
-  const merge = findMergeTarget(newType, 1, targets);
+  // ②b 合成优先（§7 合成主线）：商店卡(带自身tier)落到“同型同级”场上塔 → 合成升阶
+  const merge = findMergeTarget(newType, newTier, targets);
   if(merge){
     merge.tier = (merge.tier||1) + 1;
     G.shop.splice(slotIdx, 1);
@@ -1295,13 +1303,14 @@ function trySwap(slotIdx, newType, c, r){
   }
 
   if(allClear){
-    // ④ 落子 + 被顶掉的塔回商店
+    // ④ 落子 + 被顶掉的塔回商店（保留 tier，不丢升级）
     G.towers = G.towers.filter(t=>!targets.includes(t));
-    placeTower(newType, c, r);
+    placeTower(newType, c, r, newTier);
     G.shop.splice(slotIdx, 1);
     for(const target of targets){
       const slot = findFreeShopSlot();
-      if(slot>=0) G.shop[slot]=target.type; else G.shop.push(target.type);
+      const evicted = { type:target.type, tier:target.tier||1 };
+      if(slot>=0) G.shop[slot]=evicted; else G.shop.push(evicted);
     }
     G.selected=-1; renderShop(); updateHUD();
     if(targets.length>0) tip(`替换：${d.name} 上场，${targets.map(t=>CELLS[t.type].name).join('、')} 退回商店`);
