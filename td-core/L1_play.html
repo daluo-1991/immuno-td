@@ -241,27 +241,59 @@ function findMergeOpportunities(){
   }
   return ops;
 }
-// 「合成」按钮：把当前所有可合成组合一次性合掉（含连锁：合成后可能产生新的同阶组合，循环处理）
+// 「合成」按钮：点一次 = 只升一阶（不做连锁）。
+//   做法：先对场上塔与商店卡拍快照（记录各自原始阶），再逐阶处理——本轮新合成的卡/塔
+//   不计入快照，故不会在同一点击内被再次合成。例如 2×Lv1+1×Lv2：
+//     点第1次 → 2个Lv1合成 → 场上变 2×Lv2（按钮仍在）
+//     点第2次 → 2个Lv2合成 → 场上变 1×Lv3（按钮消失）
 function mergeAll(){
   if(!G||!G.running) return false;
-  let did=false, guard=0;
-  while(guard++ < 300){
-    const ops=findMergeOpportunities();
-    if(ops.length===0) break;
-    const op=ops[0];
-    if(op.kind==='shop-board'){
-      const tw=op.tower; tw.tier=(tw.tier||1)+1; G.shop[op.slotIdx]=null;
-      tip(`合成！${CELLS[tw.type].name} 升到 Lv.${tw.tier}`); did=true;
-    } else if(op.kind==='shop-shop'){
-      const a=G.shop[op.slotA], tp=cardType(a), k=cardTier(a);
-      G.shop[op.slotA]={type:tp, tier:k+1}; G.shop[op.slotB]=null;
-      tip(`合成！${CELLS[tp].name} 升到 Lv.${k+1}`); did=true;
-    } else if(op.kind==='board-board'){
-      const A=op.towerA; A.tier=(A.tier||1)+1;
-      removeTowerFromGrid(op.towerB); G.towers=G.towers.filter(x=>x!==op.towerB);
-      tip(`合成！${CELLS[A.type].name} 升到 Lv.${A.tier}`); did=true;
+  let did=false;
+
+  // 快照：本轮可参与合成的对象及其原始阶。新合成的卡/塔不计入 → 实现「每点一次只升一阶」。
+  const snapT = G.towers.map(t=>({ t, type:t.type, tier:(t.tier||1) }));
+  const snapS = G.shop.map((it,i)=> it && !isTileCard(it)
+      ? { i, type:cardType(it), tier:cardTier(it) }
+      : { i, type:null, tier:0 });
+  const usedT = new Set();   // 已参与合成的塔对象
+  const usedS = new Set();   // 已参与合成的商店槽索引
+  const nameOf = tp => CELLS[tp] ? CELLS[tp].name : tp;
+
+  for(let lvl=1; lvl<MAX_TIER; lvl++){
+    // ① 商店卡 → 场上同型同阶塔（优先：把卡并入场上塔，保留火力）
+    for(const s of snapS){
+      if(s.type===null || usedS.has(s.i) || s.tier!==lvl) continue;
+      const tw = snapT.find(x=> x.type===s.type && x.tier===lvl && !usedT.has(x.t));
+      if(tw){
+        tw.t.tier = lvl+1; usedT.add(tw.t); usedS.add(s.i);
+        G.shop[s.i]=null;
+        tip(`合成！${nameOf(s.type)} 升到 Lv.${lvl+1}`); did=true;
+      }
+    }
+    // ② 商店卡 ↔ 商店卡（同型同阶，两张合一张）
+    for(let a=0;a<snapS.length;a++){
+      const sA=snapS[a];
+      if(sA.type===null || usedS.has(sA.i) || sA.tier!==lvl) continue;
+      const sB = snapS.find((s,j)=> j>a && s.type===sA.type && s.tier===lvl && !usedS.has(s.i));
+      if(sB){
+        G.shop[sA.i]={type:sA.type, tier:lvl+1}; G.shop[sB.i]=null;
+        usedS.add(sA.i); usedS.add(sB.i);
+        tip(`合成！${nameOf(sA.type)} 升到 Lv.${lvl+1}`); did=true;
+      }
+    }
+    // ③ 场上塔 ↔ 场上塔（同型同阶，两座合一）
+    for(let a=0;a<snapT.length;a++){
+      const A=snapT[a];
+      if(usedT.has(A.t) || A.tier!==lvl) continue;
+      const B = snapT.find((x,j)=> j>a && x.type===A.type && x.tier===lvl && !usedT.has(x.t));
+      if(B){
+        A.t.tier = lvl+1; usedT.add(A.t); usedT.add(B.t);
+        removeTowerFromGrid(B.t); G.towers=G.towers.filter(x=>x!==B.t);
+        tip(`合成！${nameOf(A.type)} 升到 Lv.${A.t.tier}`); did=true;
+      }
     }
   }
+
   if(did){ G.selected=-1; renderShop(); updateHUD(); }
   updateMergeButton();
   return did;

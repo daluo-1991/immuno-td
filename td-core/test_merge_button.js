@@ -1,4 +1,4 @@
-// 测试「合成」按钮：条件检测 + 一键合成（三类：商店→场、商店↔商店、场↔场）+ 连锁
+// 测试「合成」按钮：条件检测 + 一键合成（三类：商店→场、商店↔商店、场↔场）+ 每点一次只升一阶（不连锁）
 const fs=require('fs'),vm=require('vm');
 const html=fs.readFileSync(__dirname+'/L1_play.html','utf-8');
 const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
@@ -64,24 +64,46 @@ G=api.getG();
 ok('一个槽升到 Lv2', G.shop.some(it=>it&&api.cardType(it)==='antibody'&&api.cardTier(it)===2));
 ok('被合成的伙伴槽清空', G.shop[2]===null);
 
-console.log('=== 5. 连锁合成（合成后产生新的同阶组合，再合一次）===');
+console.log('=== 5. 每点一次只升一阶（用户场景：2×Lv1 + 1×Lv2）===');
 G=reset();
-// 场: Lv1 巨噬 + Lv2 巨噬；商店: Lv1 巨噬
-// 点一次 → 商店Lv1 并入场Lv1 变 Lv2 → 两座 Lv2 场巨噬再合成 → 出现 Lv3
+// 场: 2 座 Lv1 巨噬 + 1 座 Lv2 巨噬 → 点第1次只把 2×Lv1 合成成 Lv2（不连锁）
 api.placeTower('macrophage',2,3,1);
-api.placeTower('macrophage',3,4,2);
-G.shop[1]={type:'macrophage',tier:1};
+api.placeTower('macrophage',3,4,1);
+api.placeTower('macrophage',4,5,2);
 api.updateMergeButton();
-const opp=api.findMergeOpportunities().length;
+ok('初始机会数=1（仅 2×Lv1 一对）', api.findMergeOpportunities().length===1);
+api.mergeAll();                              // 第 1 次点击
+G=api.getG();
+let macs=G.towers.filter(t=>t.type==='macrophage').sort((a,b)=>a.tier-b.tier);
+ok('点1次后：剩 2 座巨噬（2×Lv2）', macs.length===2 && macs.every(t=>t.tier===2));
+ok('点1次后：合成按钮仍在（仍有同阶可合）', els.mergeBtn.classList.contains('show'));
+ok('点1次后：机会数=1（2×Lv2）', api.findMergeOpportunities().length===1);
+api.mergeAll();                              // 第 2 次点击
+G=api.getG();
+macs=G.towers.filter(t=>t.type==='macrophage');
+ok('点2次后：剩 1 座巨噬', macs.length===1);
+ok('点2次后：该巨噬升到 Lv3', macs[0].tier===3);
+ok('点2次后：合成完成按钮隐藏', !els.mergeBtn.classList.contains('show'));
+
+console.log('=== 6. 4×Lv1 一次点击只合成一轮（变 2×Lv2，而非直接 Lv3）===');
+G=reset();
+api.placeTower('nk',2,3,1);
+api.placeTower('nk',3,4,1);
+api.placeTower('nk',4,5,1);
+api.placeTower('nk',5,6,1);
+api.updateMergeButton();
 api.mergeAll();
 G=api.getG();
-const boardMac=G.towers.filter(t=>t.type==='macrophage');
-ok('初始机会≥1', opp>=1);
-ok('连锁后只剩 1 座巨噬', boardMac.length===1);
-ok('该巨噬升到 Lv3（两次连锁）', boardMac[0].tier===3);
-ok('商店卡被消费', G.shop[1]===null);
+const nk4=G.towers.filter(t=>t.type==='nk');
+ok('点1次后：剩 2 座 NK', nk4.length===2);
+ok('点1次后：均为 Lv2（未跨阶到 Lv3）', nk4.every(t=>t.tier===2));
+ok('点1次后：按钮仍在', els.mergeBtn.classList.contains('show'));
+api.mergeAll();                              // 第 2 次点击
+G=api.getG();
+const nk4b=G.towers.filter(t=>t.type==='nk');
+ok('点2次后：剩 1 座 NK 且为 Lv3', nk4b.length===1 && nk4b[0].tier===3);
 
-console.log('=== 6. 满级封顶：MAX_TIER 不再被合成 ===');
+console.log('=== 7. 满级封顶：MAX_TIER 不再被合成 ===');
 G=reset();
 api.placeTower('tcell',2,3,api.MAX_TIER);      // 场上满级
 G.shop[1]={type:'tcell',tier:api.MAX_TIER};    // 商店满级
