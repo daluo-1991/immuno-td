@@ -95,6 +95,14 @@
   .btn.speed { flex: 0 0 58px; }
   #startBattleBtn { display: none; }
   #startBattleBtn.show { display: flex; }
+  #mergeBtn { display: none; flex: 0 0 auto; padding: 9px 14px; color: #04221c;
+    background: linear-gradient(135deg,#19c39e,#0fa3c9); }
+  #mergeBtn.show { display: flex; animation: mergePulse 1.1s ease-out infinite; }
+  @keyframes mergePulse {
+    0%   { box-shadow: 0 0 0 0 rgba(25,195,158,.55); }
+    70%  { box-shadow: 0 0 0 10px rgba(25,195,158,0); }
+    100% { box-shadow: 0 0 0 0 rgba(25,195,158,0); }
+  }
 
   #tip { font-size: 11px; color: #6f8199; text-align: center; padding: 4px 12px 10px; min-height: 26px; line-height: 1.5; }
 
@@ -136,10 +144,11 @@
     <div id="shopCtrl">
       <button class="btn ghost" id="rerollBtn">🔄 刷新 <span style="color:#ffd24a">⚡15</span></button>
       <button class="btn speed" id="speedBtn">▶ 1×</button>
+      <button class="btn merge" id="mergeBtn">⚡ 合成</button>
       <button class="btn" id="startBattleBtn">⚔ 开始战斗</button>
     </div>
   </div>
-  <div id="tip">放置<b>完全免费</b>。开局仅中央<b>3×3 绿格</b>可摆细胞；首槽刷出的<b>格子卡</b>（1/2/3格形状）整块点入深色<b>暗格</b>可<b>开通</b>更多摆位区。细胞卡拖到绿格落塔，拖到已有细胞上可<b>交换/顶掉</b>。能量<b>每波结束</b>由红细胞结算，点🔄刷新⚡15 重roll卡池。</div>
+  <div id="tip">放置<b>完全免费</b>。开局仅中央<b>3×3 绿格</b>可摆细胞；首槽刷出的<b>格子卡</b>（1/2/3格形状）整块点入深色<b>暗格</b>可<b>开通</b>更多摆位区。细胞卡拖到绿格落塔，拖到已有细胞上可<b>交换/顶掉</b>。同型同级两张可<b>合成升阶</b>——满足条件时底部浮现「⚡合成」按钮，点一下全部合成。能量<b>每波结束</b>由红细胞结算，点🔄刷新⚡15 重roll卡池。</div>
 
   <!-- 开始/结算遮罩 -->
   <div id="overlay">
@@ -193,6 +202,69 @@ function eff(t){
 function findMergeTarget(srcType, srcTier, targets){
   for(const tg of targets){ if(tg.type===srcType && (tg.tier||1)===srcTier) return tg; }
   return null;
+}
+// 扫描全部「同型同级(<MAX_TIER)」可合成组合，供「合成」按钮一键合：
+//   ① 商店卡 → 场上塔    ② 商店卡 ↔ 商店卡    ③ 场上塔 ↔ 场上塔
+// 返回数组；mergeAll 按数组顺序逐个合成（优先把商店卡并入场上塔，保留战斗力）。
+function findMergeOpportunities(){
+  if(!G) return [];
+  const ops=[];
+  // ① 商店卡 → 场上塔
+  for(let i=0;i<G.shop.length;i++){
+    const it=G.shop[i];
+    if(it===null || isTileCard(it)) continue;
+    const tp=cardType(it), k=cardTier(it);
+    if(k>=MAX_TIER) continue;
+    const tw=G.towers.find(t=>t.type===tp && (t.tier||1)===k);
+    if(tw) ops.push({kind:'shop-board', slotIdx:i, tower:tw});
+  }
+  // ② 商店卡 ↔ 商店卡
+  for(let i=0;i<G.shop.length;i++){
+    const a=G.shop[i];
+    if(a===null||isTileCard(a)) continue;
+    const tpA=cardType(a), kA=cardTier(a);
+    if(kA>=MAX_TIER) continue;
+    for(let j=i+1;j<G.shop.length;j++){
+      const b=G.shop[j];
+      if(b===null||isTileCard(b)) continue;
+      if(cardType(b)===tpA && cardTier(b)===kA){ ops.push({kind:'shop-shop', slotA:i, slotB:j}); break; }
+    }
+  }
+  // ③ 场上塔 ↔ 场上塔
+  for(let i=0;i<G.towers.length;i++){
+    const A=G.towers[i]; const kA=A.tier||1;
+    if(kA>=MAX_TIER) continue;
+    for(let j=i+1;j<G.towers.length;j++){
+      const B=G.towers[j];
+      if(B.type===A.type && (B.tier||1)===kA){ ops.push({kind:'board-board', towerA:A, towerB:B}); break; }
+    }
+  }
+  return ops;
+}
+// 「合成」按钮：把当前所有可合成组合一次性合掉（含连锁：合成后可能产生新的同阶组合，循环处理）
+function mergeAll(){
+  if(!G||!G.running) return false;
+  let did=false, guard=0;
+  while(guard++ < 300){
+    const ops=findMergeOpportunities();
+    if(ops.length===0) break;
+    const op=ops[0];
+    if(op.kind==='shop-board'){
+      const tw=op.tower; tw.tier=(tw.tier||1)+1; G.shop[op.slotIdx]=null;
+      tip(`合成！${CELLS[tw.type].name} 升到 Lv.${tw.tier}`); did=true;
+    } else if(op.kind==='shop-shop'){
+      const a=G.shop[op.slotA], tp=cardType(a), k=cardTier(a);
+      G.shop[op.slotA]={type:tp, tier:k+1}; G.shop[op.slotB]=null;
+      tip(`合成！${CELLS[tp].name} 升到 Lv.${k+1}`); did=true;
+    } else if(op.kind==='board-board'){
+      const A=op.towerA; A.tier=(A.tier||1)+1;
+      removeTowerFromGrid(op.towerB); G.towers=G.towers.filter(x=>x!==op.towerB);
+      tip(`合成！${CELLS[A.type].name} 升到 Lv.${A.tier}`); did=true;
+    }
+  }
+  if(did){ G.selected=-1; renderShop(); updateHUD(); }
+  updateMergeButton();
+  return did;
 }
 const SHOP_POOL = ['neutrophil','macrophage','tcell','antibody','nk','interferon','memory','redcell'];
 const WEIGHTS   = { neutrophil:11.86,macrophage:11.86,tcell:11.86,antibody:11.86,nk:11.86,interferon:11.86,memory:11.86,redcell:17 };
@@ -885,6 +957,8 @@ function render(){
     const dbg = `F=${_frameCount} t=${_gameTime.toFixed(1)}s phase=${G.phase||'?'} spawnLeft=${G.spawnLeft??'?'} shop=${G.shop?.length||0} viruses=${G.viruses.length} run=${G.running} dt_last=${(_lastDt||0).toFixed(3)}`;
     ctx.fillText(dbg, 4, LEVEL.rows*CELL - 6);
   }
+
+  updateMergeButton();   // 合成按钮：满足条件即浮现（每帧检测，无需手动刷新）
 }
 
 function drawEndpoint(p,color,txt){
@@ -1351,6 +1425,22 @@ document.getElementById('speedBtn').onclick=()=>{
   G.speed = G.speed===1?2 : G.speed===2?4 : 1;
   document.getElementById('speedBtn').textContent = '▶ '+G.speed+'×';
 };
+// 「合成」按钮：达条件时浮现，点击把当前所有可合成组合一次性合掉
+document.getElementById('mergeBtn').onclick=()=>{ mergeAll(); };
+// 每帧刷新按钮可见性 + 数量（达到条件立刻冒出）
+function updateMergeButton(){
+  const btn=document.getElementById('mergeBtn');
+  if(!btn) return;
+  if(!G||!G.running){ if(btn.classList.contains('show')) btn.classList.remove('show'); return; }
+  const ops=findMergeOpportunities();
+  if(ops.length>0){
+    const txt='⚡ 合成 ('+ops.length+')';
+    if(btn.textContent!==txt) btn.textContent=txt;
+    if(!btn.classList.contains('show')) btn.classList.add('show');
+  } else if(btn.classList.contains('show')){
+    btn.classList.remove('show');
+  }
+}
 
 // ---------- 主循环 ----------
 let lastT=0, _gameTime=0;
