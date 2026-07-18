@@ -54,8 +54,15 @@ function isOpen(G,c,r){ return G.grid[r][c]===null; }
 function findDark(G){ for(let r=1;r<=7;r++) for(let c=1;c<=5;c++) if(isLocked(G,c,r)) return {c,r}; return null; }
 // 找一个开通(绿)格
 function findGreen(G){ for(let r=1;r<=7;r++) for(let c=1;c<=5;c++) if(isOpen(G,c,r)) return {c,r}; return null; }
+// 找一个全绿(4格null)的 2×2 左上角锚点
+function findGreen2x2Anchor(G){
+  for(let ar=1; ar<=7-1; ar++) for(let ac=1; ac<=5-1; ac++){
+    if(isOpen(G,ac,ar)&&isOpen(G,ac+1,ar)&&isOpen(G,ac,ar+1)&&isOpen(G,ac+1,ar+1)) return {ac,ar};
+  }
+  return null;
+}
 
-console.log('=== 暗格松手 → 2×2 吸到最近绿格落子（默认棋盘绿格在吸附范围内） ===');
+console.log('=== 2×2 严格模式：暗格松手 → 卡片退回商店 ===');
 api.start(); TIP=[];
 let G = api.getG();
 let d = findDark(G);
@@ -66,13 +73,27 @@ api.renderShop();
 G.selected = -1;
 const towersBefore = G.towers.length;
 api.trySwap(0, 'macrophage', d.c, d.r);
-const mac = G.towers.find(t=>t.type==='macrophage');
-ok('2×2 吸到绿格落子（巨噬已上场）', !!mac);
-ok('卡片被消耗（shop[0] 清空）', G.shop[0]===null);
-ok('towers 数量 +1', G.towers.length===towersBefore+1);
-ok('落点 4 格均非暗格（即落在开通区，未压到 locked）', mac && !isLocked(G,mac.col,mac.row) && !isLocked(G,mac.col+1,mac.row) && !isLocked(G,mac.col,mac.row+1) && !isLocked(G,mac.col+1,mac.row+1));
+ok('2×2 暗格松手→卡片未消耗（退商店）', G.shop[0]==='macrophage');
+ok('2×2 暗格松手→未落塔（巨噬不在 towers 中）', !G.towers.find(t=>t.type==='macrophage'));
+ok('towers 数量不变', G.towers.length===towersBefore);
 ok('原暗格(拖放点)仍保持 locked（未变绿）', isLocked(G,d.c,d.r));
-ok('暗格从未被改为绿格（全棋盘 locked 数不变）', G.grid.flat().filter(x=>x==='locked').length===26);
+
+console.log('=== 2×2 严格模式：绿格 2×2 区域 → 正常落子（对照） ===');
+api.start(); TIP=[];
+G = api.getG();
+let a = findGreen2x2Anchor(G);
+console.log(`  选 2×2 全绿锚点 (${a.ac},${a.ar})，鼠标落在其中心格 (${a.ac+1},${a.ar+1})`);
+G.shop = ['macrophage', null, null, null];
+api.renderShop();
+G.selected = -1;
+const tb2x2 = G.towers.length;
+api.trySwap(0, 'macrophage', a.ac+1, a.ar+1);
+const mac2 = G.towers.find(t=>t.type==='macrophage');
+ok('2×2 绿格区域→落子（巨噬已上场）', !!mac2);
+ok('卡片被消耗（shop[0] 清空）', G.shop[0]===null);
+ok('towers 数量 +1', G.towers.length===tb2x2+1);
+ok('落点是合法 2×2 锚点(在内格摆位区)', mac2 && mac2.col>=1 && mac2.col<=3 && mac2.row>=1 && mac2.row<=5);
+ok('落点 4 格均非暗格（即落在全绿 2×2 区域内）', mac2 && !isLocked(G,mac2.col,mac2.row) && !isLocked(G,mac2.col+1,mac2.row) && !isLocked(G,mac2.col,mac2.row+1) && !isLocked(G,mac2.col+1,mac2.row+1));
 
 console.log('=== 暗格松手 → 卡片退回商店（1×1 中性粒） ===');
 api.start(); TIP=[];

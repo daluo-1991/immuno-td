@@ -1,4 +1,8 @@
-// 验证两级吸附：1×1 精确（暗格/占格回退，不吸邻居）；2×2 先精确后宽窗口吸附。
+// 验证严格落点模式（用户 2026-07-18 拍板：2×2 与 1×1 一致，禁宽吸附）：
+//  - 1×1 精确：暗格/占格 → null（不吸邻居）
+//  - 2×2 严格：落点区域必须正好全绿(或全空可顶掉)才落子，悬停暗格 → null（不吸到附近）
+//  - 2×2 顶掉 1×1 占用塔 仍成功
+//  - 2×2 拖动到 2×2 塔 footprint 任意格 → 顶掉/互换
 const fs = require('fs');
 const vm = require('vm');
 const html = fs.readFileSync('L1_play.html', 'utf-8');
@@ -32,8 +36,7 @@ const requestAnimationFrame = ()=>{};
 const setInterval = ()=>0;
 const setTimeout = (fn)=>0;
 const alert = ()=>{};
-const console2 = console;
-const ctx = { document, window, requestAnimationFrame, setInterval, setTimeout, alert, console:console2,
+const ctx = { document, window, requestAnimationFrame, setInterval, setTimeout, alert, console,
   Math, Date, JSON, Object, Array, Proxy, String, Number, Boolean, isNaN, parseInt, parseFloat };
 ctx.globalThis = ctx;
 
@@ -50,26 +53,25 @@ function ok(name, cond){ if(cond){pass++; console.log('  ✅ '+name);} else {fai
 console.log('\n[A] 1×1 精确落点');
 api.start();
 let G = api.getG();
-// 全开通
 for(let r=1;r<=rows-2;r++) for(let c=1;c<=cols-2;c++) G.grid[r][c]=null;
-// 在 (3,3) 放一个暗格（locked）
 G.grid[3][3]='locked';
 ok('1×1 悬停暗格(3,3) → null(回退,不吸到邻格)', api.anchorFor('neutrophil',3,3)===null);
 ok('1×1 悬停合法格(2,2) → 精确落点(2,2)', JSON.stringify(api.anchorFor('neutrophil',2,2))===JSON.stringify({ac:2,ar:2}));
 
-// ---------- B. 2×2 宽吸附：悬停暗格附近有空位 → 吸到合法位 ----------
-console.log('\n[B] 2×2 宽吸附（悬停暗格也能吸到附近合法 2×2）');
+// ---------- B. 2×2 严格：悬停暗格 → null（不吸到附近）；悬停全绿区 → 落子 ----------
+console.log('\n[B] 2×2 严格模式（禁宽吸附）');
 api.start();
 G = api.getG();
 for(let r=1;r<=rows-2;r++) for(let c=1;c<=cols-2;c++) G.grid[r][c]=null;
-// 让 (3,3) 为暗格，但 (1,1) 区域全空（合法 2×2 位 (1,1) 存在）
 G.grid[3][3]='locked';
 const ev = api.anchorForWithEvict('macrophage', 3, 3, null);
-ok('2×2 悬停暗格(3,3) 也能吸附到附近合法位(非null)', !!ev);
-ok('2×2 吸附位确实是合法 2×2 全空位', ev ? (function(){ for(let dr=0;dr<2;dr++)for(let dc=0;dc<2;dc++){ if(G.grid[ev.anchor.ar+dr][ev.anchor.ac+dc]!==null) return false;} return true;})() : false);
+ok('2×2 悬停暗格(3,3) → null（严格模式不吸附）', ev===null);
+for(let r=1;r<=rows-2;r++) for(let c=1;c<=cols-2;c++) G.grid[r][c]=null;
+const ev2 = api.anchorForWithEvict('macrophage', 2, 2, null);
+ok('2×2 悬停全绿区域(2,2 为中心) → 非null', !!ev2);
 
-// ---------- C. 半满棋盘：宽模式 vs 精确模式 成功率对照 ----------
-console.log('\n[C] 半满棋盘 2×2 落点成功率（宽模式 vs 精确模式）');
+// ---------- C. 严格模式：anchorForWithEvict 与精确模式逐格一致（无宽吸附）----------
+console.log('\n[C] 严格模式：anchorForWithEvict ≡ 精确模式（无宽吸附分支）');
 function buildSparse(lockedRatio, K){
   api.start();
   const g = api.getG();
@@ -84,47 +86,38 @@ function buildSparse(lockedRatio, K){
   }
   return g;
 }
-function rate(g, fn){
-  let tot=0, succ=0;
-  for(let r=1;r<=rows-2;r++) for(let c=1;c<=cols-2;c++){
-    tot++;
-    if(fn(g,c,r)) succ++;
-  }
-  return succ/tot;
-}
-let wideRates=[], exactRates=[];
+let agree=true;
 for(let t=0;t<6;t++){
-  const g = buildSparse(0.3, 3);   // 30% 暗格 + 3 座散塔，模拟真实半开通棋盘
-  const wide = rate(g, (g,c,r)=>!!api.anchorForWithEvict('macrophage',c,r,null));
-  const exact = rate(g, (g,c,r)=>!!api.anchorForWithEvictCore('macrophage',c,r,null,false));
-  wideRates.push(wide); exactRates.push(exact);
+  const g = buildSparse(0.3, 3);
+  for(let r=1;r<=rows-2;r++) for(let c=1;c<=cols-2;c++){
+    const a = api.anchorForWithEvict('macrophage',c,r,null);
+    const b = api.anchorForWithEvictCore('macrophage',c,r,null,false);
+    const sa = a?(a.anchor.ac+','+a.anchor.ar+'|'+a.targets.length):'null';
+    const sb = b?(b.anchor.ac+','+b.anchor.ar+'|'+b.targets.length):'null';
+    if(sa!==sb) agree=false;
+  }
 }
-const aw = (wideRates.reduce((a,b)=>a+b,0)/wideRates.length*100).toFixed(1);
-const ae = (exactRates.reduce((a,b)=>a+b,0)/exactRates.length*100).toFixed(1);
-console.log(`  宽模式成功率=${aw}%  精确模式成功率=${ae}%`);
-ok('宽模式成功率 >> 精确模式（证明 2×2 不再“很多地方拖不进”）', parseFloat(aw) >= parseFloat(ae)+30);
-ok('宽模式成功率足够高(>=80%)', parseFloat(aw) >= 80);
+ok('anchorForWithEvict 与精确模式逐格一致（严格无宽吸）', agree);
 
-// ---------- D. 红框顶掉（2×2 覆盖占用塔）仍成功 ----------
-console.log('\n[D] 2×2 顶掉占用塔（红框右下中性粒）');
+// ---------- D. 2×2 顶掉 1×1 占用塔 仍成功 ----------
+console.log('\n[D] 2×2 顶掉占用 1×1 塔');
 api.start();
 G = api.getG();
 for(let r=1;r<=rows-2;r++) for(let c=1;c<=cols-2;c++) G.grid[r][c]=null;
-// 红框 col4-5 row1-2，右下(5,2) 中性粒
 api.placeTower('neutrophil', 5, 2);
-const ev2 = api.anchorForWithEvict('macrophage', 5, 2, null);
-ok('悬停中性粒(5,2) → 2×2 锚点命中且 targets 含中性粒', !!ev2 && ev2.targets.length===1 && ev2.targets[0].type==='neutrophil');
-ok('锚点使红框4格全可放(顶掉后)', ev2 ? (function(){ for(let dr=0;dr<2;dr++)for(let dc=0;dc<2;dc++){ const cc=ev2.anchor.ac+dc, rr=ev2.anchor.ar+dr; if(cc<1||cc>cols-2||rr<1||rr>rows-2) return false;} return true;})() : false);
+const ev3 = api.anchorForWithEvict('macrophage', 5, 2, null);
+ok('悬停中性粒(5,2) → 2×2 锚点命中且 targets 含中性粒', !!ev3 && ev3.targets.length===1 && ev3.targets[0].type==='neutrophil');
+ok('锚点使红框4格全可放(顶掉后)', ev3 ? (function(){ for(let dr=0;dr<2;dr++)for(let dc=0;dc<2;dc++){ const cc=ev3.anchor.ac+dc, rr=ev3.anchor.ar+dr; if(cc<1||cc>cols-2||rr<1||rr>rows-2) return false;} return true;})() : false);
 
-// ---------- E. 拖动 2×2 到 2×2 塔 footprint 任意格，都顶掉/互换（用户截图场景） ----------
+// ---------- E. 拖动 2×2 到 2×2 塔 footprint 任意格 → 顶掉/互换 ----------
 console.log('\n[E] 拖动 2×2 到 2×2 塔 footprint 上任意位置 → 顶掉/互换');
 let allSwap=true;
 for(let r=2; r<=3; r++){
   for(let c=3; c<=4; c++){
     api.start();
     G = api.getG();
-    api.placeTower('interferon', 1, 1); // source 2x2
-    api.placeTower('memory', 3, 2);     // target 2x2 red-box position
+    api.placeTower('interferon', 1, 1);
+    api.placeTower('memory', 3, 2);
     const interferon = G.towers.find(t=>t.type==='interferon');
     const res = api.tryMoveOrSwap(interferon, c, r);
     const okCond = res.ok && (res.swapped || (interferon.col===3 && interferon.row===2));

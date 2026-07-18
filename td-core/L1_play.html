@@ -311,16 +311,13 @@ function canPlace(type,col,row){
 }
 
 // 把点击格(c,r)解析为 size×size 塔的合法「左上角锚点」。
-// 语义：
+// 语义（严格模式，2×2 与 1×1 一致，用户 2026-07-18 拍板）：
 //  - 1×1：精确落点，点击格本身必须可放（暗格/占用→null，由调用方回退商店/原位）。绝不吸到邻居。
-//  - 2×2：先试“点击格落在 footprint 内”的精确 4 候选（瞄哪能落哪）；
-//         若都失败（如附近含暗格/被占），再在“以理想锚点为中心 ±size 锚点”的宽窗口里
-//         吸附到最近的合法 2×2 位（点击格可不在 footprint 内）。宽窗口也失败→返回 null（回退）。
-//   这样 2×2 在半满棋盘绝大多数位置都能拖动/放置，又不会像 1×1 那样吸到邻格乱跑。
+//  - 2×2：仅试“点击格落在 footprint 内”的精确 4 候选（瞄哪能落哪）；
+//         4 候选都失败（如附近含暗格/被占）→ 返回 null（回退商店）。不做宽窗口吸附。
+//   即：细胞卡可拖到任意位置，但落点必须正好在绿格区域内，暗格上松手→自动退商店。
 function anchorFor(type, c, r){
-  const exact = anchorForCore(type, c, r, false);
-  if(exact || CELLS[type].size===1) return exact;
-  return anchorForCore(type, c, r, true);
+  return anchorForCore(type, c, r, false);
 }
 function anchorForCore(type, c, r, wide){
   const s = CELLS[type].size;
@@ -351,11 +348,10 @@ function anchorForCore(type, c, r, wide){
 
 // 对「移动/交换」场景：把点击格(c,r)解析为合法左上角锚点，并允许临时顶掉该 footprint 内其他塔。
 // 返回 { anchor:{ac,ar}, targets:Tower[] }，找不到返回 null。targets 为需要被顶掉的场上塔（已去重）。
-// 语义同 anchorFor：1×1 精确；2×2 先精确 4 候选，失败再宽窗口吸附最近的合法（可顶掉）2×2 位。
+// 语义同 anchorFor（严格模式）：1×1 精确；2×2 仅精确 4 候选，失败→null（回退）。
+// 注：鼠标落在同尺寸塔 footprint 内时，由函数顶部的“同尺寸顶掉优先”块直接返回该塔原位（替换），不受宽窗口影响。
 function anchorForWithEvict(type, c, r, exclude){
-  const exact = anchorForWithEvictCore(type, c, r, exclude, false);
-  if(exact || CELLS[type].size===1) return exact;
-  return anchorForWithEvictCore(type, c, r, exclude, true);
+  return anchorForWithEvictCore(type, c, r, exclude, false);
 }
 function anchorForWithEvictCore(type, c, r, exclude, wide){
   const s = CELLS[type].size;
