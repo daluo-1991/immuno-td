@@ -139,7 +139,7 @@
       <button class="btn" id="startBattleBtn">⚔ 开始战斗</button>
     </div>
   </div>
-  <div id="tip">放置<b>完全免费</b>。开局中间仅<b>预留格(绿)</b>可摆细胞；刷出的<b>「格子」卡有不同形状</b>（1格/横2格/竖2格/各种3格），必须整块放入深色空缺才能开通。已有细胞可<b>拖动</b>。红细胞在<b>每波结束</b>结算能量（用于刷新）。</div>
+  <div id="tip">放置<b>完全免费</b>。开局内格<b>全开(绿)</b>可直接摆细胞；细胞卡拖到绿格落塔，拖到已有细胞上可<b>交换/顶掉</b>。已有细胞可<b>拖动</b>。能量<b>每波结束</b>由红细胞结算，点🔄刷新⚡15 重roll卡池。</div>
 
   <!-- 开始/结算遮罩 -->
   <div id="overlay">
@@ -506,8 +506,10 @@ function weightedPick(){
   for(const k of SHOP_POOL){ x-=WEIGHTS[k]; if(x<=0) return k; }
   return SHOP_POOL[0];
 }
-// 商店：首槽恒为格子卡（随机形状），其余 3 槽为细胞卡
-function rollShop(){ G.shop = [pickTileShape(), weightedPick(), weightedPick(), weightedPick()]; G.selected=-1; renderShop(); }
+// 商店：4 槽全部为细胞卡（格子卡已移除——见下方说明）
+//   · 格子卡（多形状开通暗格）原在首槽恒出；内格已全开、无暗格可开，故 2026-07-18 移除。
+//   · 如需恢复：把下面任一槽改回 pickTileShape() 即可（放置/渲染/拖拽的 格子卡 分支仍保留为可回收路径）。
+function rollShop(){ G.shop = [weightedPick(), weightedPick(), weightedPick(), weightedPick()]; G.selected=-1; renderShop(); }
 
 // ---------- 波次 ----------
 function startWave(i){
@@ -931,7 +933,7 @@ function selectSlot(i){
     tip('');
   }
 }
-function tip(s){ document.getElementById('tip').textContent = s || '点格子卡→点暗格区域开通；或点细胞卡→点绿格摆放。'; }
+function tip(s){ document.getElementById('tip').textContent = s || '点细胞卡→点绿格摆放；或拖到已有细胞上交换/顶掉。'; }
 
 // ---------- 交互 ----------
 let hoverCell=null, showRangeTower=null, drag=null;
@@ -1193,7 +1195,7 @@ document.getElementById('rerollBtn').onclick=()=>{
   G.energy-=15;
   // 整个卡池一起刷新（格子卡+细胞卡一起重roll，之前没用掉的格子一并被刷没）
   rollShop(); updateHUD();
-  tip('卡池已刷新（格子卡跟着一起刷，没用掉的格子会丢失）');
+  tip('卡池已刷新，获得新一批细胞卡');
 };
 document.getElementById('speedBtn').onclick=()=>{
   G.speed = G.speed===1?2 : G.speed===2?4 : 1;
