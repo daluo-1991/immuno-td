@@ -14,6 +14,7 @@ function makeEl(id){
     addEventListener(){}, removeEventListener(){},
     appendChild(c){ this._children.push(c); }, get childElementCount(){ return this._children.length; },
     getContext(){ return ctxStub; },
+    querySelectorAll(sel){ return []; },
     getBoundingClientRect(){ return { left:0, top:0, width:336, height:432 }; },
     setPointerCapture(){}, releasePointerCapture(){},
   };

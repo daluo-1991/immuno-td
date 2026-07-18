@@ -28,6 +28,7 @@ function makeEl(id) {
     addEventListener(type, fn) { (el._listeners[type] ||= []).push(fn); },
     appendChild(c) { el._children.push(c); },
     getBoundingClientRect() { return { left: 0, top: 0, width: 336, height: 432 }; },
+    querySelectorAll() { return []; },
   });
   return el;
 }

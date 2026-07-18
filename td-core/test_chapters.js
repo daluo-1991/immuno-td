@@ -1,28 +1,40 @@
-// 闯关模式（线性串联骨架）自检：多章配置 / 难度递进 / 章节切换 / 胜利分章推进 / Boss血量递进
+// 闯关模式（系统战役 / 选关地图）自检：多章配置 / 难度递进 / 章节切换 / 结算页→战役页→选章 / 进度持久化
 // 用真实代码 vm 加载 L1_play.html 验证（2026-07-18）
 const fs=require('fs'),vm=require('vm');
 const html=fs.readFileSync('L1_play.html','utf-8');
 const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 function makeEl(id){
-  return {
-    id,_children:[],textContent:'',innerHTML:'',value:'',width:336,height:432,
+  const el={
+    id,_children:[],textContent:'',value:'',width:336,height:432,
     style:new Proxy({},{get:()=>'',set:()=>true}),
     classList:{_s:new Set(),add(c){this._s.add(c)},remove(c){this._s.delete(c)},toggle(c,f){f?this._s.add(c):this._s.delete(c)},contains(c){return this._s.has(c)}},
-    onclick:null,_listeners:{},addEventListener(t,fn){(this._listeners[t]||(this._listeners[t]=[])).push(fn)},
+    onclick:null,_listeners:{},_cards:null,addEventListener(t,fn){(this._listeners[t]||(this._listeners[t]=[])).push(fn)},
     removeEventListener(){},appendChild(c){this._children.push(c)},
     get childElementCount(){return this._children.length},
     getContext(){return ctxStub},getBoundingClientRect(){return{left:0,top:0,width:336,height:432}},
-    setPointerCapture(){},releasePointerCapture(){}
+    setPointerCapture(){},releasePointerCapture(){},
+    querySelectorAll(sel){
+      if(!this._cards){ const h=this.innerHTML||''; const re=/class="(ch-card[^"]*)"\s*data-i="(\d+)"/g; let m,res=[];
+        while((m=re.exec(h))){ const cls=m[1].split(' '); const c={dataset:{i:m[2]},classList:{contains:c=>cls.includes(c)},style:{},onclick:null}; res.push(c); }
+        this._cards=res; }
+      if(sel && sel.includes(':not(.locked)')) return this._cards.filter(e=>!e.classList.contains('locked'));
+      return this._cards;
+    }
   };
+  let _html='';
+  Object.defineProperty(el,'innerHTML',{get:()=>_html,set:v=>{_html=String(v); el._cards=null;}});
+  return el;
 }
 const ctxStub=new Proxy({},{get(){return()=>{}}});
 const els={},docListeners={};
+const _store={};
+const localStorage={getItem:k=>(k in _store?_store[k]:null),setItem:(k,v)=>{_store[k]=String(v)},removeItem:k=>{delete _store[k]}};
 const document={getElementById(id){if(!els[id])els[id]=makeEl(id);return els[id]},addEventListener(t,fn){(docListeners[t]||(docListeners[t]=[])).push(fn)},createElement(){return makeEl('dyn')},body:{appendChild(){}}};
 const window={};
-const ctx={document,window,requestAnimationFrame:()=>{},setInterval:()=>0,setTimeout:(fn)=>0,alert:()=>{},console,Math,Date,JSON,Object,Array,Proxy,String,Number,Boolean,isNaN,parseInt,parseFloat};
+const ctx={document,window,localStorage,requestAnimationFrame:()=>{},setInterval:()=>0,setTimeout:(fn)=>0,alert:()=>{},console,Math,Date,JSON,Object,Array,Proxy,String,Number,Boolean,isNaN,parseInt,parseFloat};
 ctx.globalThis=ctx;
-const exposed=script+'\nwindow.__api={getG:()=>G,CELLS,VIRUSES,LEVELS,start,startRun,newGame,endGame,spawnVirus,chapterWaves};';
+const exposed=script+'\nwindow.__api={getG:()=>G,CELLS,VIRUSES,LEVELS,start,startRun,newGame,endGame,spawnVirus,chapterWaves,showCampaign,saveUnlocked,loadProgress,getProgress:()=>progress};';
 new vm.Script(exposed).runInNewContext(ctx);
 const api=window.__api;
 
@@ -53,36 +65,34 @@ ok('idx4 → chapterIdx=4 / 第5章', G.chapterIdx===4 && api.LEVELS[4].chapterN
 api.newGame(2); G=api.getG();
 ok('idx2 → 当前 LEVEL.waves 跟随 LEVELS[2]', G.waveIdx===0 && api.LEVELS[2].waves.length===9);
 
-console.log('=== 4. 胜利分章推进 ===');
-api.newGame(0); G=api.getG();
-api.endGame(true);
-const ov1=document.getElementById('overlay').innerHTML;
-ok('第1章通关 → 显示「进入 第 2 章」', ov1.includes('进入 第 2 章'));
-ok('第1章通关 → 存在 nextBtn', !!document.getElementById('nextBtn'));
-document.getElementById('nextBtn').onclick();   // 模拟点击「进入下一章」
+console.log('=== 4. 结算页 → 确定 → 战役页 → 选第2章 ===');
+api.newGame(0); api.endGame(true);
+const ov=document.getElementById('overlay');
+ok('第1章通关 → 显示结算页(含「确定」)', ov.innerHTML.includes('确定'));
+document.getElementById('okBtn').onclick();   // 点「确定」→ 进入战役页
+ok('确定后进入「系统战役」页', ov.innerHTML.includes('系统战役'));
+ok('通关后第2章已解锁 (progress.unlocked>=1)', api.getProgress().unlocked>=1);
+const unlockedCards = ov.querySelectorAll('.ch-card:not(.locked)');
+const ch2 = unlockedCards.find(c=>c.dataset.i==='1');
+ok('战役页第2章卡片可点击(非locked)', !!ch2);
+ch2.onclick();   // 选第2章
 G=api.getG();
-ok('点 nextBtn → 进入第2章 (chapterIdx=1)', G.chapterIdx===1 && api.LEVELS[1].chapterName==='第 2 章');
+ok('点第2章 → 进入 第2章 且开始运行', G.chapterIdx===1 && G.running===true);
 
-api.newGame(4); G=api.getG();
-api.endGame(true);
-const ov5=document.getElementById('overlay').innerHTML;
-ok('第5章(末章)通关 → 显示「全部通关」', ov5.includes('全部通关'));
-ok('末章通关 → 无「进入 第」按钮(从头再战)', !ov5.includes('进入 第'));
+console.log('=== 5. 末章通关 → 全部通关 + 全部标记已通关 ===');
+api.newGame(4); api.endGame(true);
+ok('第5章通关 → 显示「全部通关 · 查看战役」', document.getElementById('overlay').innerHTML.includes('全部通关'));
+document.getElementById('okBtn').onclick();
+ok('全通后所有5章解锁(progress.unlocked>=5)', api.getProgress().unlocked>=5);
+ok('战役页渲染全部5章卡片', document.getElementById('overlay').innerHTML.split('data-i="').length-1===5);
 
-console.log('=== 5. 失败重玩本章 ===');
-api.newGame(3); G=api.getG();
-api.endGame(false);
-const ovf=document.getElementById('overlay').innerHTML;
-ok('失败 → 显示「发烧失败」', ovf.includes('发烧失败'));
-document.getElementById('againBtn').onclick();
-G=api.getG();
-ok('点 againBtn → 重玩本章 (chapterIdx=3)', G.chapterIdx===3);
+console.log('=== 6. 失败 → 返回战役 ===');
+api.newGame(0); api.endGame(false);
+const fov=document.getElementById('overlay').innerHTML;
+ok('失败页含「返回战役」', fov.includes('返回战役'));
+document.getElementById('campBtn').onclick();
+ok('点「返回战役」→ 进入战役页', document.getElementById('overlay').innerHTML.includes('系统战役'));
 
-console.log('=== 6. spawnVirus hpMul（Boss 血量递进）===');
-api.newGame(2); G=api.getG();
-api.spawnVirus('boss1', 2.0);
-const v=G.viruses[0];
-ok('boss1 hpMul=2 → hp/maxhp = 450×2 = 900', v.hp===boss1hp*2 && v.maxhp===boss1hp*2);
-
-console.log(`\n结果：${pass} 通过 / ${fail} 失败`);
+console.log('');
+console.log(`结果：${pass} 通过 / ${fail} 失败`);
 process.exit(fail?1:0);

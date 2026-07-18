@@ -1292,23 +1292,67 @@ function endGame(win){
   const ov=document.getElementById('overlay');
   ov.classList.remove('hide');
   const towerCount=G.towers.length;
-  const idx = G.chapterIdx, hasNext = idx < LEVELS.length-1;
+  const idx = G.chapterIdx;
   if(win){
-    if(hasNext){
-      const nx = LEVELS[idx+1].chapterName;
-      ov.innerHTML = `<h1>🎉 ${LEVEL.chapterName} 通过！</h1><p>8 轮小怪 + 1 个 BOSS 全部拦截。<br>峰值体温 <span class="em">${peakTemp.toFixed(1)}°</span> · 摆放 <span class="em">${towerCount}</span> 个细胞。</p><button class="btn big" id="nextBtn">进入 ${nx}</button><button class="btn" id="againBtn">重玩本章</button>`;
-      document.getElementById('nextBtn').onclick = ()=>{ newGame(idx+1); startRun(); };
-      document.getElementById('againBtn').onclick = ()=>{ newGame(idx); startRun(); };
-    } else {
-      ov.innerHTML = `<h1>🏆 全部通关！</h1><p>你守住了全部 ${LEVELS.length} 章！<br>峰值体温 <span class="em">${peakTemp.toFixed(1)}°</span> · 摆放 <span class="em">${towerCount}</span> 个细胞。</p><button class="btn big" id="againBtn">从头再战</button>`;
-      document.getElementById('againBtn').onclick = start;
-    }
+    saveUnlocked(idx+1);                 // 结算时即解锁下一章（持久化）
+    const last = idx >= LEVELS.length-1;
+    ov.innerHTML = `<h1>🎉 ${LEVEL.chapterName} 通过！</h1>
+      <p>8 轮小怪 + 1 个 BOSS 全部拦截。<br>
+      峰值体温 <span class="em">${peakTemp.toFixed(1)}°</span> · 摆放 <span class="em">${towerCount}</span> 个细胞。</p>
+      <button class="btn big" id="okBtn">${last?'全部通关 · 查看战役':'确定'}</button>`;
+    document.getElementById('okBtn').onclick = showCampaign;
   } else {
-    ov.innerHTML = `<h1>🤒 发烧失败</h1><p>体温飙到 <span class="em">42°</span>，病毒攻陷身体。<br>漏怪太多——把塔往<span class="em">出口(右上)侧</span>多摆，或多摆红细胞攒能量堆更多塔。</p><button class="btn big" id="againBtn">重玩本章</button>`;
+    ov.innerHTML = `<h1>🤒 发烧失败</h1><p>体温飙到 <span class="em">42°</span>，病毒攻陷身体。<br>漏怪太多——把塔往<span class="em">出口(右上)侧</span>多摆，或多摆红细胞攒能量堆更多塔。</p>
+      <button class="btn big" id="againBtn">重玩本章</button>
+      <button class="btn" id="campBtn">返回战役</button>`;
     document.getElementById('againBtn').onclick = ()=>{ newGame(idx); startRun(); };
+    document.getElementById('campBtn').onclick = showCampaign;
   }
 }
 let peakTemp = BAL.baseTemp;
+
+// ---------- 战役进度持久化（localStorage，失败静默降级）----------
+const SAVE_KEY = 'immuno_td_progress_v1';
+function loadProgress(){
+  try { const r = JSON.parse(localStorage.getItem(SAVE_KEY)); if(r && typeof r.unlocked==='number') return r; } catch(e){}
+  return { unlocked: 0 };                 // 默认仅第 1 章解锁
+}
+function saveUnlocked(idx){
+  const p = loadProgress();
+  if(idx > p.unlocked){
+    p.unlocked = idx;
+    try{ localStorage.setItem(SAVE_KEY, JSON.stringify(p)); }catch(e){}
+    progress = p;                         // 同步模块级，确保 showCampaign 读到最新
+  }
+}
+let progress = loadProgress();
+
+// ---------- 系统战役页面（选关地图）----------
+function showCampaign(){
+  G && (G.running=false);
+  const ov=document.getElementById('overlay');
+  ov.classList.remove('hide');
+  let cards='';
+  for(let i=0;i<LEVELS.length;i++){
+    const unlocked = i <= progress.unlocked;
+    const cleared  = i <  progress.unlocked;   // 已通关（下一章已解锁）
+    const sub = cleared ? '✓ 已通关' : (unlocked ? '可挑战' : '🔒 未解锁');
+    cards += `<div class="ch-card${unlocked?'':' locked'}" data-i="${i}" style="width:120px;padding:14px;border-radius:12px;background:${unlocked?'#0e7c66':'#2a2a32'};color:#fff;border:2px solid ${unlocked?'#19c39e':'#444'};${unlocked?'':'opacity:.5;filter:grayscale(1);cursor:not-allowed;'}">
+      <div style="font-size:18px;font-weight:700">第 ${i+1} 章</div>
+      <div style="font-size:13px;opacity:.85;margin-top:6px">${sub}</div>
+    </div>`;
+  }
+  ov.innerHTML = `<h1>🛡️ 系统战役</h1>
+    <p>选择章节开始防御。<b>通关一章即解锁下一章</b>，可随时回看 / 重打已解锁章节。</p>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:18px 0">${cards}</div>
+    <button class="btn" id="resetBtn">重置进度</button>`;
+  ov.querySelectorAll('.ch-card:not(.locked)').forEach(el=>{
+    el.style.cursor='pointer';
+    el.onclick=()=>{ const i=+el.dataset.i; newGame(i); startRun(); };
+  });
+  const rb=document.getElementById('resetBtn');
+  if(rb) rb.onclick=()=>{ try{localStorage.removeItem(SAVE_KEY);}catch(e){} progress={unlocked:0}; showCampaign(); };
+}
 
 // 复用：隐藏结算层 + 启动运行（newGame 之后调用，或从头 start）
 function startRun(){
@@ -1335,7 +1379,7 @@ function start(){
     alert('启动报错: '+e.message+'\n'+e.stack);
   }
 }
-document.getElementById('startBtn').onclick=start;
+showCampaign();   // 初始进入系统战役（选关）页面，而非自动开战
 
 setInterval(()=>{ if(G&&G.running) peakTemp=Math.max(peakTemp,G.temp); },100);
 

@@ -12,7 +12,8 @@ function makeEl(id){
     style:new Proxy({},{get:()=>'',set:()=>true}),
     classList:{_s:new Set(),add(c){this._s.add(c)},remove(c){this._s.delete(c)},toggle(c,f){f?this._s.add(c):this._s.delete(c)},contains(c){return this._s.has(c)}},
     onclick:null,_listeners:{},addEventListener(t,fn){(this._listeners[t]||(this._listeners[t]=[])).push(fn)},removeEventListener(){},
-    appendChild(c){this._children.push(c)},get childElementCount(){return this._children.length},
+    appendChild(c){this._children.push(c)},
+    querySelectorAll(sel){return [];},get childElementCount(){return this._children.length},
     getContext(){return ctxStub},getBoundingClientRect(){return{left:0,top:0,width:336,height:432}},
     setPointerCapture(){},releasePointerCapture(){},
   };
