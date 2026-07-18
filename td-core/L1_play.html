@@ -167,6 +167,32 @@ const CELLS = {
   memory:     { name:'记忆',   short:'记', role:'intel',    cost:45, dps:0,  range:0,   atkSpeed:1.0, size:2, color:'#8b5cf6' },
   redcell:    { name:'红细胞', short:'红', role:'economic', cost:10, dps:0,  range:0,   energyRate:2, size:1, color:'#dc2626' },
 };
+
+// ---------- §7 合成主线：同型同级 2合1 → tier+1 ----------
+// 占位尺寸不变（“不压缩格子”天然满足），属性按阶递增。
+const TIER_MULT = 1.7;   // 每升一阶：dps / 能量 / 光环 / 减益 主数值倍率
+function eff(t){
+  const d = CELLS[t.type];
+  const k = t.tier || 1;
+  const m = Math.pow(TIER_MULT, k-1);
+  return {
+    ...d,
+    dps: d.dps * m,
+    atkSpeed: d.atkSpeed * (1 + 0.12*(k-1)),
+    range: d.range + 0.45*(k-1),
+    energyRate: (d.energyRate||0) * m,
+    aura: (d.aura||1) * m,
+    debuff: (d.debuff||1) * m,
+    aoe: d.aoe||0,
+    slow: d.slow||0,
+    tier: k,
+  };
+}
+// 拖放物(srcType,srcTier) 落到 targets 集合时，找第一个“同型同级”可合目标
+function findMergeTarget(srcType, srcTier, targets){
+  for(const tg of targets){ if(tg.type===srcType && (tg.tier||1)===srcTier) return tg; }
+  return null;
+}
 const SHOP_POOL = ['neutrophil','macrophage','tcell','antibody','nk','interferon','memory','redcell'];
 const WEIGHTS   = { neutrophil:11.86,macrophage:11.86,tcell:11.86,antibody:11.86,nk:11.86,interferon:11.86,memory:11.86,redcell:17 };
 
@@ -300,7 +326,7 @@ function newGame(idx){
 
 function placeTower(type, col, row){
   const d = CELLS[type];
-  const t = { type, col, row, size:d.size, cd:0, target:null };
+  const t = { type, col, row, size:d.size, cd:0, target:null, tier:1 };
   G.towers.push(t);
   for(let dr=0;dr<d.size;dr++)for(let dc=0;dc<d.size;dc++){
     if(grid_in(col+dc,row+dr)) G.grid[row+dr][col+dc] = t;
@@ -557,7 +583,7 @@ function auraBuff(t){
   for(const o of G.towers){
     if(o===t || CELLS[o.type].role!=='aura') continue;
     const oc=towerCenter(o);
-    if(dist(c.x,c.y,oc.x,oc.y) <= CELLS[o.type].range){ atk*=CELLS[o.type].aura; spd*=CELLS[o.type].aura; }
+    if(dist(c.x,c.y,oc.x,oc.y) <= eff(o).range){ atk*=eff(o).aura; spd*=eff(o).aura; }
   }
   return {atk,spd};
 }
@@ -581,12 +607,13 @@ function step(dt){
       if(G.spawnTimer<=0){ spawnVirus(w.virus, w.hpMul); G.spawnLeft--; G.spawnTimer=w.interval; }
     } else if(G.viruses.length===0){
       // 本波清空 → 结算红细胞产能
-      const reds = G.towers.filter(t=>CELLS[t.type].role==='economic').length;
-      if(reds>0){
-        const gain = reds*BAL.redEnergyPer;
+      const redCells = G.towers.filter(t=>CELLS[t.type].role==='economic');
+      if(redCells.length>0){
+        // 红细胞合成后产能按 tier 放大（tier1 与旧值 15 完全一致，不破坏平衡）
+        const gain = redCells.reduce((s,t)=>s + BAL.redEnergyPer*Math.pow(TIER_MULT,(t.tier||1)-1), 0);
         G.energy += gain;
         addFloater((1+LEVEL.cols)/2, 0.5, '红细胞产能 +'+gain+'⚡', '#ffd24a');
-        tip(reds+' 个红细胞结算能量 +'+gain);
+        tip(redCells.length+' 个红细胞结算能量 +'+gain);
       }
       if(G.waveIdx>=LEVEL.waves.length-1){ G.phase='win'; endGame(true); return; }
       G.phase='gap'; G.waveGapTimer=BAL.waveGap;
@@ -619,7 +646,7 @@ function step(dt){
 
   // 塔攻击
   for(const t of G.towers){
-    const d=CELLS[t.type];
+    const d=eff(t);
     if(d.role==='economic'||d.role==='intel'||d.range<=0) continue;
     t.cd -= dt;
     const c=towerCenter(t);
@@ -753,47 +780,59 @@ function render(){
     const isShop = drag.kind==='shop';
     const type = isShop ? drag.type : drag.tower.type;
     const t = isShop ? null : drag.tower;
-    const d=CELLS[type];
+    const d = isShop ? CELLS[type] : eff(t);
     // 商店卡：光标即2×2左上角，预览框始终跟光标走（不吸附到别的锚点）。
-    //   - 光标落在同尺寸塔上 → 显示⇄替换预览(黄)，锚点=该塔原位
-    //   - 否则 → canPlace(光标位) 判定：全绿=蓝(可放)，含暗格/越界=红(放不下)
-    // 场上塔拖动：保留 anchorForWithEvict（挪位需要吸附到最近合法位）
-    let valid, isSwap=false, ax, ay;
+    //   - 光标落在“同型同级”塔上 → 显示⤴合成预览(紫)，落子即升阶（§7 合成主线，最高优先级）
+    //   - 光标落在其它已占塔上 → 显示⇄替换预览(黄)
+    //   - 全绿 → 蓝(可放)；含暗格/越界 → 红(放不下)
+    // 场上塔拖动：保留 anchorForWithEvict（挪位需要吸附到最近合法位）；落同型同级塔→合成
+    let valid, isSwap=false, isMerge=false, ax, ay;
     if(t) removeTowerFromGrid(t);
     if(isShop){
-      // 光标即2×2左上角：检查 footprint 越界/暗格/塔
+      // 光标即2×2左上角：检查 footprint 越界/暗格/塔，以及是否有可合成的“同型同级”塔
       let outOfBounds=false, hasDark=false, hasTower=false;
       for(let dr=0;dr<d.size;dr++)for(let dc=0;dc<d.size;dc++){
         const cc=drag.hoverC+dc, rr=drag.hoverR+dr;
         if(cc<1||cc>LEVEL.cols-2||rr<1||rr>LEVEL.rows-2){ outOfBounds=true; continue; }
         const v=G.grid[rr] && G.grid[rr][cc];
         if(v==='locked') hasDark=true;
-        else if(v && typeof v==='object') hasTower=true;
+        else if(v && typeof v==='object'){ hasTower=true; if(v.type===type && (v.tier||1)===1) isMerge=true; }
       }
       ax = drag.hoverC; ay = drag.hoverR;
       if(outOfBounds || hasDark){ valid=false; }
+      else if(isMerge){ valid=true; }
       else if(hasTower){ valid=true; isSwap=true; }
       else { valid=true; }
     } else {
       const ev = anchorForWithEvict(type, drag.hoverC, drag.hoverR, t);
       valid = !!ev;
       isSwap = !!ev && ev.targets.length>0;
+      // 拖动塔落到的塔集合里若有“同型同级”者 → 合成（最高优先级）
+      if(ev && ev.targets.some(tg=>tg.type===type && (tg.tier||1)===(t.tier||1))) isMerge=true;
       ax = ev ? ev.anchor.ac : drag.hoverC;
       ay = ev ? ev.anchor.ar : drag.hoverR;
     }
     if(t) restoreTowerToGrid(t);
     const gx=ax*CELL, gy=ay*CELL, gs=d.size*CELL;
-    ctx.fillStyle = valid ? (isSwap?'rgba(250,204,21,.32)':'rgba(108,200,255,.30)') : 'rgba(239,68,68,.30)';
+    let fill, stroke;
+    if(isMerge){ fill='rgba(168,85,247,.34)'; stroke='rgba(168,85,247,.9)'; }
+    else if(valid && isSwap){ fill='rgba(250,204,21,.32)'; stroke='rgba(250,204,21,.7)'; }
+    else if(valid){ fill='rgba(108,200,255,.30)'; stroke='rgba(108,200,255,.6)'; }
+    else { fill='rgba(239,68,68,.30)'; stroke='rgba(239,68,68,.6)'; }
+    ctx.fillStyle = fill;
     ctx.fillRect(gx+3,gy+3,gs-6,gs-6);
-    if(d.range>0){ ctx.strokeStyle= valid ? (isSwap?'rgba(250,204,21,.7)':'rgba(108,200,255,.6)') : 'rgba(239,68,68,.6)'; ctx.lineWidth=1.5;
+    if(d.range>0){ ctx.strokeStyle= stroke; ctx.lineWidth=1.5;
       ctx.beginPath(); ctx.arc(gx+gs/2,gy+gs/2,d.range*CELL,0,7); ctx.stroke(); }
-    if(isSwap){
+    if(isMerge){
+      ctx.fillStyle='rgba(168,85,247,.95)'; ctx.font='bold 14px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('⤴', gx+gs/2, gy-9);
+    } else if(isSwap){
       ctx.fillStyle='rgba(250,204,21,.95)'; ctx.font='bold 13px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText('⇄', gx+gs/2, gy-9);
     }
   }
   // 选中塔射程
-  if(showRangeTower){ const t=showRangeTower,d=CELLS[t.type]; if(d.range>0){ const c=towerCenter(t);
+  if(showRangeTower){ const t=showRangeTower,d=eff(t); if(d.range>0){ const c=towerCenter(t);
     ctx.fillStyle='rgba(255,210,74,.08)'; ctx.strokeStyle='rgba(255,210,74,.45)'; ctx.lineWidth=1.5;
     ctx.beginPath(); ctx.arc(c.x*CELL,c.y*CELL,d.range*CELL,0,7); ctx.fill(); ctx.stroke(); } }
 
@@ -841,6 +880,14 @@ function drawTower(t){
   ctx.strokeStyle='#ffffff55'; ctx.lineWidth=1.5; ctx.stroke();
   ctx.fillStyle='#fff'; ctx.font='bold '+(d.size>1?15:13)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText(d.short,cx,cy);
+  // §7 合成主线：tier≥2 画阶数角标（不压缩占位，仅视觉叠加）
+  const k=t.tier||1;
+  if(k>1){
+    const bx=px+sz-15, by=py+sz-14;
+    ctx.fillStyle='rgba(0,0,0,.55)'; roundRect(bx,by,13,12,4); ctx.fill();
+    ctx.fillStyle='#ffd24a'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('L'+k, bx+6.5, by+6);
+  }
 }
 function drawVirus(v){
   const p=virusPos(v); const x=p.x*CELL, y=p.y*CELL; const vc=VIRUSES[v.type];
@@ -956,7 +1003,7 @@ function selectSlot(i){
     tip('');
   }
 }
-function tip(s){ document.getElementById('tip').textContent = s || '点格子卡→点暗格整块开通；点细胞卡→点绿格摆放（或拖到已有细胞上交换/顶掉）。（开局仅中央 3×3 绿格）'; }
+function tip(s){ document.getElementById('tip').textContent = s || '点细胞卡→点绿格摆放；拖「同型同级」细胞到另一座上可⤴合成升阶（变大变强、占位不变）。（开局仅中央 3×3 绿格）'; }
 
 // ---------- 交互 ----------
 let hoverCell=null, showRangeTower=null, drag=null;
@@ -1128,6 +1175,16 @@ function tryMoveOrSwap(t, c, r){
     return { ok:false, msg:'目标位置无法摆放：'+(reason||'周围被占用或超出范围') };
   }
   const { anchor:a, targets } = res;
+  // 合成优先（§7 合成主线）：拖动的塔(t.type,t.tier) 落到“同型同级”塔 → 合成（source 被吸收，目标升阶）
+  const merge = findMergeTarget(t.type, t.tier||1, targets);
+  if(merge){
+    removeTowerFromGrid(t);                  // 清 source 占位（函数开头已移除，double safe）
+    G.towers = G.towers.filter(x=>x!==t);    // source 被融合吸收
+    merge.tier = (merge.tier||1) + 1;
+    renderShop(); updateHUD();
+    tip(`合成！${CELLS[merge.type].name} 升到 Lv.${merge.tier}`);
+    return { ok:true, merged:true, msg:'' };
+  }
   // 没动：新落点就是原位，且没有顶掉任何塔
   if(a.ac===t.col && a.ar===t.row && targets.length===0){
     restoreTowerToGrid(t);
@@ -1217,6 +1274,16 @@ function trySwap(slotIdx, newType, c, r){
     const issues = diagnosePlacement(newType, c, r);
     const reason = issues.length ? issues.slice(0,4).join('；') : '目标位置含暗格';
     tip('放不下：'+reason);
+    return;
+  }
+
+  // ②b 合成优先（§7 合成主线）：商店卡 tier1 落到“同型同级”场上塔 → 合成升阶
+  const merge = findMergeTarget(newType, 1, targets);
+  if(merge){
+    merge.tier = (merge.tier||1) + 1;
+    G.shop.splice(slotIdx, 1);
+    G.selected=-1; renderShop(); updateHUD();
+    tip(`合成！${CELLS[merge.type].name} 升到 Lv.${merge.tier}`);
     return;
   }
 
