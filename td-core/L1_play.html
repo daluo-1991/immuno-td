@@ -212,35 +212,45 @@ function pickTileShape(){
 // ---------- L1 关卡（7×9 总画布，外环路径，内 5×7 摆位区） ----------
 // 坐标系：col 0-6(左→右), row 0-8(上→下)
 // 外圈(col 0/col 6/row 0/row 8)=病毒通道 | 内格(col 1-5, row 1-7)=5×7 摆位区
-const LEVEL = {
-  cols: 7, rows: 9,
-  chapterName:'第 1 章',   // 当前关卡归属章节（多章系统后续接入）
-  roundTotal:8,           // 每章 8 轮小怪（BOSS 不算轮）
-  entrance:{col:0,row:0}, exit:{col:6,row:0},
-  // C 形路径：左侧列下 → 底边横跨 → 右侧列上
-  path:[
-    [0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[0,8],
-    [1,8],[2,8],[3,8],[4,8],[5,8],[6,8],
-    [6,7],[6,6],[6,5],[6,4],[6,3],[6,2],[6,1],[6,0]
-  ],
-  // 不预置任何细胞：开局只留 reserved 预留格（可摆位但空），细胞全靠玩家从商店自摆
-  preplaced:[],
-  // 开局即开通的预留格（3×3 簇，居中于 5×7 摆位区）
-  reserved:[ [2,3],[3,3],[4,3], [2,4],[3,4],[4,4], [2,5],[3,5],[4,5] ],
-  // 章内节奏：8 轮小怪，第 4 轮小怪清空后跟 1 个 BOSS，之后第 5~8 轮纯小怪
-  // waves 数组顺序：轮1..轮4(小) → BOSS → 轮5..轮8(小) ＝ 共 9 个出怪事件
-  waves:[
-    { virus:'rhinovirus', count:5,  interval:3.0 },  // 第1轮
-    { virus:'rhinovirus', count:6,  interval:2.6 },  // 第2轮
-    { virus:'rhinovirus', count:7,  interval:2.2 },  // 第3轮
-    { virus:'rhinovirus', count:7,  interval:2.0 },  // 第4轮（小怪，BOSS 在其后）
-    { virus:'boss1',       count:1,  interval:2.0, isBoss:true },   // 第4轮后：BOSS1
-    { virus:'rhinovirus', count:8,  interval:2.0 },  // 第5轮
-    { virus:'rhinovirus', count:9,  interval:1.8 },  // 第6轮
-    { virus:'rhinovirus', count:10, interval:1.6 },  // 第7轮
-    { virus:'rhinovirus', count:12, interval:1.4 },  // 第8轮
-  ],
-};
+// ---------- 多章配置（线性闯关：依次过关 + 难度递进）----------
+// 所有章共享 7×9 棋盘、C 形路径、中央 3×3 绿簇；差异仅在章节名与波次/敌人强度。
+const C_PATH = [
+  [0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[0,8],
+  [1,8],[2,8],[3,8],[4,8],[5,8],[6,8],
+  [6,7],[6,6],[6,5],[6,4],[6,3],[6,2],[6,1],[6,0]
+];
+const RESERVED = [ [2,3],[3,3],[4,3], [2,4],[3,4],[4,4], [2,5],[3,5],[4,5] ];
+
+// 章内节奏：8 轮小怪 + 1 BOSS，共 9 出怪事件；难度随章号(idx)递增
+function chapterWaves(idx){
+  const cnt  = b => Math.round(b * (1 + idx*0.26));                  // 小怪数量逐章增加
+  const intv = b => Math.max(0.9, +(b - idx*0.16).toFixed(2));      // 出怪间隔逐章收紧
+  return [
+    { virus:'rhinovirus', count:cnt(5),  interval:intv(3.0) },
+    { virus:'rhinovirus', count:cnt(6),  interval:intv(2.6) },
+    { virus:'rhinovirus', count:cnt(7),  interval:intv(2.2) },
+    { virus:'rhinovirus', count:cnt(7),  interval:intv(2.0) },
+    { virus: idx%2 ? 'boss2':'boss1', count:1, interval:2.0, isBoss:true, hpMul: 1 + idx*0.6 }, // BOSS 血量逐章放大
+    { virus:'rhinovirus', count:cnt(8),  interval:intv(2.0) },
+    { virus:'rhinovirus', count:cnt(9),  interval:intv(1.8) },
+    { virus:'rhinovirus', count:cnt(10), interval:intv(1.6) },
+    { virus:'rhinovirus', count:cnt(12), interval:intv(1.4) },
+  ];
+}
+const CHAPTER_COUNT = 5;
+const LEVELS = [];
+for(let i=0;i<CHAPTER_COUNT;i++){
+  LEVELS.push({
+    cols:7, rows:9,
+    chapterName:'第 '+(i+1)+' 章',
+    roundTotal:8,
+    entrance:{col:0,row:0}, exit:{col:6,row:0},
+    path:C_PATH, preplaced:[],
+    reserved:RESERVED,
+    waves: chapterWaves(i),
+  });
+}
+let LEVEL = LEVELS[0];   // 当前章（newGame 时切换到 LEVELS[idx]）
 const BAL = { baseTemp:37.0, failTemp:42.0, tempPerLeak:0.45, coolPerSec:0.25, redEnergyPer:15, waveGap:4.0, startEnergy:40 };
 const PREP_TIME = 30;   // 开局准备期（秒）：玩家可布防，倒计时归零或点「开始战斗」提前结束
 
@@ -256,7 +266,9 @@ document.getElementById('fever').style.height = cv.height+'px';
 let G = null;
 function keyOf(c,r){ return c+','+r; }
 
-function newGame(){
+function newGame(idx){
+  idx = (idx|0);
+  LEVEL = LEVELS[idx];
   const pathSet = new Set(LEVEL.path.map(p=>keyOf(p[0],p[1])));
   const grid = [];
   for(let r=0;r<LEVEL.rows;r++) grid.push(new Array(LEVEL.cols).fill(null));
@@ -274,6 +286,7 @@ function newGame(){
     energy: BAL.startEnergy, temp: BAL.baseTemp,
     waveIdx: 0, spawnLeft: 0, spawnTimer: 0, waveGapTimer: 0.8,
     phase: 'prep', prepTimer: PREP_TIME,
+    chapterIdx: idx,
     shop: [], selected: -1,
     speed: 1, running: false,
     projectiles: [], floaters: [],
@@ -522,9 +535,10 @@ function startWave(i){
   }
   updateHUD();
 }
-function spawnVirus(type){
+function spawnVirus(type, hpMul){
   const v = VIRUSES[type];
-  G.viruses.push({ type, hp:v.hp, maxhp:v.hp, prog:0, speed:v.speed, vuln:1.0, slowT:0 });
+  const m = hpMul||1;
+  G.viruses.push({ type, hp:v.hp*m, maxhp:v.hp*m, prog:0, speed:v.speed, vuln:1.0, slowT:0 });
 }
 
 // ---------- 战斗核心 ----------
@@ -564,7 +578,7 @@ function step(dt){
     const w=LEVEL.waves[G.waveIdx];
     if(G.spawnLeft>0){
       G.spawnTimer-=dt;
-      if(G.spawnTimer<=0){ spawnVirus(w.virus); G.spawnLeft--; G.spawnTimer=w.interval; }
+      if(G.spawnTimer<=0){ spawnVirus(w.virus, w.hpMul); G.spawnLeft--; G.spawnTimer=w.interval; }
     } else if(G.viruses.length===0){
       // 本波清空 → 结算红细胞产能
       const reds = G.towers.filter(t=>CELLS[t.type].role==='economic').length;
@@ -1278,25 +1292,40 @@ function endGame(win){
   const ov=document.getElementById('overlay');
   ov.classList.remove('hide');
   const towerCount=G.towers.length;
-  ov.innerHTML = win
-    ? `<h1>🎉 第 1 章通过！</h1><p>8 轮小怪 + 1 个 BOSS 全部拦截。<br>峰值体温 <span class="em">${peakTemp.toFixed(1)}°</span> · 最终摆放 <span class="em">${towerCount}</span> 个细胞。</p><button class="btn big" id="againBtn">再玩一次</button>`
-    : `<h1>🤒 发烧失败</h1><p>体温飙到 <span class="em">42°</span>，病毒攻陷身体。<br>漏怪太多了——试试把塔往<span class="em">出口(右上)侧</span>多摆，或多摆红细胞攒能量堆更多塔。</p><button class="btn big" id="againBtn">再来一次</button>`;
-  document.getElementById('againBtn').onclick=start;
+  const idx = G.chapterIdx, hasNext = idx < LEVELS.length-1;
+  if(win){
+    if(hasNext){
+      const nx = LEVELS[idx+1].chapterName;
+      ov.innerHTML = `<h1>🎉 ${LEVEL.chapterName} 通过！</h1><p>8 轮小怪 + 1 个 BOSS 全部拦截。<br>峰值体温 <span class="em">${peakTemp.toFixed(1)}°</span> · 摆放 <span class="em">${towerCount}</span> 个细胞。</p><button class="btn big" id="nextBtn">进入 ${nx}</button><button class="btn" id="againBtn">重玩本章</button>`;
+      document.getElementById('nextBtn').onclick = ()=>{ newGame(idx+1); startRun(); };
+      document.getElementById('againBtn').onclick = ()=>{ newGame(idx); startRun(); };
+    } else {
+      ov.innerHTML = `<h1>🏆 全部通关！</h1><p>你守住了全部 ${LEVELS.length} 章！<br>峰值体温 <span class="em">${peakTemp.toFixed(1)}°</span> · 摆放 <span class="em">${towerCount}</span> 个细胞。</p><button class="btn big" id="againBtn">从头再战</button>`;
+      document.getElementById('againBtn').onclick = start;
+    }
+  } else {
+    ov.innerHTML = `<h1>🤒 发烧失败</h1><p>体温飙到 <span class="em">42°</span>，病毒攻陷身体。<br>漏怪太多——把塔往<span class="em">出口(右上)侧</span>多摆，或多摆红细胞攒能量堆更多塔。</p><button class="btn big" id="againBtn">重玩本章</button>`;
+    document.getElementById('againBtn').onclick = ()=>{ newGame(idx); startRun(); };
+  }
 }
-let peakTemp=37;
+let peakTemp = BAL.baseTemp;
+
+// 复用：隐藏结算层 + 启动运行（newGame 之后调用，或从头 start）
+function startRun(){
+  document.getElementById('overlay').classList.add('hide');
+  G.running = true;
+  peakTemp = BAL.baseTemp;
+  updateHUD();
+  renderShop();
+}
 
 // ---------- 启动 ----------
 let _frameCount = 0;
 function start(){
   document.getElementById('overlay').classList.add('hide');
   try {
-    newGame();
-    G.running = true;
-    peakTemp = 37;
-    _gameTime = 0;
-    _lastDt = 0;
-    updateHUD();
-    renderShop();
+    newGame(0);
+    startRun();
     // 二次保险：下一帧再确认 running（防止被某处异步重置）
     setTimeout(()=>{
       if(G && !G.running) G.running = true;
