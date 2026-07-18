@@ -746,14 +746,19 @@ function render(){
     let valid, isSwap=false, ax, ay;
     if(t) removeTowerFromGrid(t);
     if(isShop){
-      const hoverVal = G.grid[drag.hoverR] && G.grid[drag.hoverR][drag.hoverC];
-      if(hoverVal && typeof hoverVal==='object' && hoverVal.size===d.size && hoverVal!==t){
-        isSwap = true; valid = true;
-        ax = hoverVal.col; ay = hoverVal.row;
-      } else {
-        valid = canPlace(type, drag.hoverC, drag.hoverR);
-        ax = drag.hoverC; ay = drag.hoverR;
+      // 光标即2×2左上角：检查 footprint 越界/暗格/塔
+      let outOfBounds=false, hasDark=false, hasTower=false;
+      for(let dr=0;dr<d.size;dr++)for(let dc=0;dc<d.size;dc++){
+        const cc=drag.hoverC+dc, rr=drag.hoverR+dr;
+        if(cc<1||cc>LEVEL.cols-2||rr<1||rr>LEVEL.rows-2){ outOfBounds=true; continue; }
+        const v=G.grid[rr] && G.grid[rr][cc];
+        if(v==='locked') hasDark=true;
+        else if(v && typeof v==='object') hasTower=true;
       }
+      ax = drag.hoverC; ay = drag.hoverR;
+      if(outOfBounds || hasDark){ valid=false; }
+      else if(hasTower){ valid=true; isSwap=true; }
+      else { valid=true; }
     } else {
       const ev = anchorForWithEvict(type, drag.hoverC, drag.hoverR, t);
       valid = !!ev;
@@ -1169,47 +1174,61 @@ function tryMoveOrSwap(t, c, r){
   return { ok:true, swapped: targets.length>0, msg:'' };
 }
 // 商店卡落子（与拖动预览一致：光标即2×2左上角，不吸附到别的锚点）
-//   - 光标落在同尺寸塔上 → 替换（旧塔退回商店）
-//   - 否则 → canPlace(光标位) 判定：可放则落子，不可放则退商店
+//   - 光标位 footprint 内有塔 → 顶掉(回商店)，新卡落子
+//   - 光标位 footprint 全空(绿格) → 直接落子
+//   - 光标位 footprint 含暗格/越界 → 退商店（不消耗）
 function trySwap(slotIdx, newType, c, r){
   const d = CELLS[newType];
-  const cellVal = G.grid[r] && G.grid[r][c];
+  const s = d.size;
 
-  // ① 光标落在同尺寸塔上 → 替换
-  if(cellVal && typeof cellVal==='object' && cellVal.size===d.size){
-    const target = cellVal;
-    removeTowerFromGrid(target);
-    let allClear = true;
-    for(let dr=0; dr<d.size; dr++){ for(let dc=0; dc<d.size; dc++){
-      if(G.grid[target.row+dr][target.col+dc]!==null){ allClear=false; break; }
-    } if(!allClear) break; }
-    if(allClear){
-      G.towers = G.towers.filter(t=>t!==target);
-      placeTower(newType, target.col, target.row);
-      G.shop.splice(slotIdx,1);
-      const slot = findFreeShopSlot();
-      if(slot>=0) G.shop[slot]=target.type; else G.shop.push(target.type);
-      G.selected=-1; renderShop(); updateHUD();
-      tip(`替换：${d.name} 上场，${CELLS[target.type].name} 退回商店`);
+  // ① 越界检查：footprint 必须全在内格摆位区
+  for(let dr=0;dr<s;dr++)for(let dc=0;dc<s;dc++){
+    const cc=c+dc, rr=r+dr;
+    if(cc<1||cc>LEVEL.cols-2||rr<1||rr>LEVEL.rows-2){
+      tip('放不下：'+cc+'列'+rr+'行 越出摆位区');
       return;
     }
-    restoreTowerToGrid(target);
-    tip('放不下：目标位置有其他塔阻挡');
+  }
+
+  // ② 收集 footprint 内的塔（去重）+ 检查暗格
+  const targets = [];
+  let hasDark = false;
+  for(let dr=0;dr<s;dr++)for(let dc=0;dc<s;dc++){
+    const val = G.grid[r+dr][c+dc];
+    if(val === 'locked'){ hasDark = true; }
+    else if(val && typeof val==='object'){ if(!targets.includes(val)) targets.push(val); }
+  }
+  if(hasDark){
+    const issues = diagnosePlacement(newType, c, r);
+    const reason = issues.length ? issues.slice(0,4).join('；') : '目标位置含暗格';
+    tip('放不下：'+reason);
     return;
   }
 
-  // ② 光标即左上角：canPlace 判定
-  if(canPlace(newType, c, r)){
+  // ③ 临时移除 footprint 内的塔，检查是否全空
+  for(const target of targets) removeTowerFromGrid(target);
+  let allClear = true;
+  for(let dr=0;dr<s;dr++)for(let dc=0;dc<s;dc++){
+    if(G.grid[r+dr][c+dc] !== null){ allClear = false; break; }
+  }
+
+  if(allClear){
+    // ④ 落子 + 被顶掉的塔回商店
+    G.towers = G.towers.filter(t=>!targets.includes(t));
     placeTower(newType, c, r);
-    G.shop.splice(slotIdx,1);
+    G.shop.splice(slotIdx, 1);
+    for(const target of targets){
+      const slot = findFreeShopSlot();
+      if(slot>=0) G.shop[slot]=target.type; else G.shop.push(target.type);
+    }
     G.selected=-1; renderShop(); updateHUD();
+    if(targets.length>0) tip(`替换：${d.name} 上场，${targets.map(t=>CELLS[t.type].name).join('、')} 退回商店`);
     return;
   }
 
-  // ③ 放不下 → 退商店（不消耗卡片）
-  const issues = diagnosePlacement(newType, c, r);
-  const reason = issues.length ? issues.slice(0,4).join('；') : '目标位置无法摆放';
-  tip('放不下：'+reason);
+  // ⑤ footprint 未清空（重叠等罕见情况）→ 还原 + 退商店
+  for(const target of targets) restoreTowerToGrid(target);
+  tip('放不下：目标位置有其他塔阻挡');
 }
 
 // ---------- 商店渲染（含格子卡形状预览）----------
