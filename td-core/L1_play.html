@@ -106,6 +106,46 @@
 
   #tip { font-size: 11px; color: #6f8199; text-align: center; padding: 4px 12px 10px; min-height: 26px; line-height: 1.5; }
 
+  /* ===== 记忆观察者 HUD 条 ===== */
+  #obsBar { padding: 6px 12px 2px; }
+  .obsHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .obsTitle { font-size: 11px; font-weight: 700; color: #c7b6ff; }
+  .obsLv { font-size: 11px; font-weight: 800; color: #8b5cf6; }
+  #obsTrack {
+    position: relative; height: 14px; border-radius: 8px; overflow: hidden;
+    background: #17203180; border: 1px solid #2c2350;
+  }
+  #obsFill {
+    height: 100%; width: 0%; border-radius: 8px;
+    background: linear-gradient(90deg,#8b5cf6,#c084fc); transition: width .25s ease;
+  }
+  .obsExpTxt {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700; color: #e5dcff; text-shadow: 0 1px 2px #000;
+  }
+
+  /* ===== 三选一 buff 弹层 ===== */
+  #buffOverlay {
+    position: absolute; inset: 0; z-index: 30; display: flex;
+    flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(8,5,20,.9); backdrop-filter: blur(5px); padding: 20px;
+  }
+  #buffOverlay.hide { display: none; }
+  .buffTitle { font-size: 22px; font-weight: 800; color: #d6c8ff; margin-bottom: 6px; }
+  .buffSub { font-size: 12px; color: #9c8fc4; margin-bottom: 22px; text-align: center; max-width: 300px; line-height: 1.6; }
+  #buffCards { display: flex; gap: 12px; width: 100%; max-width: 360px; }
+  .buffCard {
+    flex: 1; background: linear-gradient(160deg,#241a3d,#161029);
+    border: 1.5px solid #4a3a7a; border-radius: 14px; padding: 16px 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    cursor: pointer; transition: transform .1s, border-color .15s, box-shadow .15s;
+  }
+  .buffCard:active { transform: scale(.95); }
+  .buffCard:hover { border-color: #a78bfa; box-shadow: 0 0 0 2px rgba(167,139,250,.35), 0 6px 18px rgba(139,92,246,.3); }
+  .buffCard .bIco { font-size: 30px; }
+  .buffCard .bName { font-size: 13px; font-weight: 800; color: #e9e2ff; }
+  .buffCard .bDesc { font-size: 11px; color: #b3a6d6; text-align: center; line-height: 1.5; }
+
   /* ===== 遮罩 ===== */
   #overlay {
     position: absolute; inset: 0; z-index: 20; display: flex;
@@ -138,6 +178,12 @@
     <div id="fever"></div>
   </div>
 
+  <!-- 记忆观察者（成长辅线）：不占棋盘，杀怪攒经验，满格三选一 -->
+  <div id="obsBar">
+    <div class="obsHead"><span class="obsTitle">🧠 记忆观察者</span><span class="obsLv" id="obsLv">Lv.1</span></div>
+    <div id="obsTrack"><div id="obsFill"></div><span id="obsExpTxt" class="obsExpTxt">0/15</span></div>
+  </div>
+
   <!-- 商店 -->
   <div id="shop">
     <div id="shopRow"></div>
@@ -155,6 +201,13 @@
     <h1>🦠 免疫塔防 L1</h1>
     <p>病毒从<span class="em">左上角</span>入侵，沿外圈行进，从<span class="em">右上角</span>逃逸进入身体。<br>漏怪越多体温越高，<span class="em">到 42° 就发烧失败</span>。<br>每章 <span class="em">8 轮</span>小怪，<span class="em">第 4 轮后出 1 个 BOSS</span>。在中间格子摆放免疫细胞拦住它们！</p>
     <button class="btn big" id="startBtn">开始防御</button>
+  </div>
+
+  <!-- 记忆观察者：经验满 → 暂停战斗 → 三选一 buff 弹层 -->
+  <div id="buffOverlay" class="hide">
+    <div class="buffTitle">🧠 记忆觉醒 · <span id="buffLv">Lv.1</span></div>
+    <div class="buffSub">观察者积累了足够记忆——选择一项永久强化（本局有效）</div>
+    <div id="buffCards"></div>
   </div>
 </div>
 
@@ -198,6 +251,81 @@ function eff(t){
     tier: k,
   };
 }
+// ---------- §7.2 记忆观察者（成长辅线）----------
+// 观察者不上场、不占棋盘；杀怪攒经验，满一格 → 暂停战斗 → 3 选 1 buff → 生效并升级。
+// 经验阈值随观察者等级递增（每章约触发 3-4 次）：Lv1=15, 每升一级 +7。
+function obsExpFor(level){ return 15 + (Math.max(1,level)-1)*7; }
+// buff 池：每次触发随机取 3 张三选一。守 IAA 红线，强度 +12~20%，不让弱玩家 100% 通关。
+const BUFF_POOL = [
+  { id:'fire',   icon:'🔥', name:'火力强化',  desc:'全体细胞伤害 +15%',       apply:g=>{ g.buffs.atk  += 0.15; } },
+  { id:'rapid',  icon:'⚡', name:'速攻协同',  desc:'全体细胞攻速 +12%',       apply:g=>{ g.buffs.spd  += 0.12; } },
+  { id:'wall',   icon:'🛡️', name:'免疫坚壁',  desc:'漏怪体温惩罚 -15%',       apply:g=>{ g.buffs.def  *= 0.85; } },
+  { id:'cool',   icon:'❄️', name:'退烧调节',  desc:'体温自然下降 +20%',       apply:g=>{ g.buffs.cool += 0.20; } },
+  { id:'eco',    icon:'💰', name:'增产因子',  desc:'红细胞产能 +20%',         apply:g=>{ g.buffs.eco  += 0.20; } },
+  { id:'energy', icon:'🔋', name:'能量储备',  desc:'立即获得 +30 能量',       apply:g=>{ g.energy    += 30;   } },
+];
+// 杀怪加经验；跨过阈值即触发（暂停+弹层）。boss 给更多经验。
+function gainObsExp(n){
+  if(!G) return;
+  G.obsExp += n;
+  maybeTriggerObserver();
+}
+function maybeTriggerObserver(){
+  if(!G || G.paused) return;                    // 已在弹层中不重复触发
+  if(G.obsExp >= G.obsExpMax){ G.paused = true; showBuffPanel(); }
+}
+// 随机取 3 张 buff 三选一（避免同一次出现重复 id）
+function rollBuffChoices(){
+  const pool = BUFF_POOL.slice();
+  for(let i=pool.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [pool[i],pool[j]]=[pool[j],pool[i]]; }
+  return pool.slice(0,3);
+}
+let _buffChoices = [];
+function showBuffPanel(){
+  _buffChoices = rollBuffChoices();
+  const ov = document.getElementById('buffOverlay');
+  const wrap = document.getElementById('buffCards');
+  if(wrap){
+    wrap.innerHTML = _buffChoices.map((b,i)=>
+      `<div class="buffCard" data-i="${i}">
+         <div class="bIco">${b.icon}</div>
+         <div class="bName">${b.name}</div>
+         <div class="bDesc">${b.desc}</div>
+       </div>`).join('');
+    wrap.querySelectorAll('.buffCard').forEach(el=>{
+      el.onclick = ()=> pickBuff(+el.getAttribute('data-i'));
+    });
+  }
+  const lv = document.getElementById('buffLv');
+  if(lv) lv.textContent = 'Lv.'+G.obsLevel;
+  if(ov) ov.classList.remove('hide');
+}
+function pickBuff(i){
+  const b = _buffChoices[i];
+  if(!b || !G) return;
+  b.apply(G);                                   // 应用增益
+  G.obsExp -= G.obsExpMax;                       // 扣除本级阈值（多余经验保留）
+  G.obsLevel++;                                  // 观察者升级
+  G.obsExpMax = obsExpFor(G.obsLevel);           // 下一级阈值更高
+  tip(`记忆强化：${b.name} 生效！观察者升到 Lv.${G.obsLevel}`);
+  updateObsHUD();
+  // 多余经验若已越过新阈值 → 连续再弹一次；否则关闭弹层、恢复战斗
+  if(G.obsExp >= G.obsExpMax){
+    showBuffPanel();
+  } else {
+    const ov = document.getElementById('buffOverlay');
+    if(ov) ov.classList.add('hide');
+    G.paused = false;
+  }
+}
+function updateObsHUD(){
+  if(!G) return;
+  const lv = document.getElementById('obsLv'); if(lv) lv.textContent = 'Lv.'+G.obsLevel;
+  const bar = document.getElementById('obsFill');
+  if(bar){ const pct = Math.max(0,Math.min(100, G.obsExp/G.obsExpMax*100)); bar.style.width = pct+'%'; }
+  const txt = document.getElementById('obsExpTxt'); if(txt) txt.textContent = Math.floor(G.obsExp)+'/'+G.obsExpMax;
+}
+
 // 拖放物(srcType,srcTier) 落到 targets 集合时，找第一个“同型同级”可合目标
 function findMergeTarget(srcType, srcTier, targets){
   for(const tg of targets){ if(tg.type===srcType && (tg.tier||1)===srcTier) return tg; }
@@ -421,8 +549,16 @@ function newGame(idx){
     shop: [], selected: -1,
     speed: 1, running: false,
     projectiles: [], floaters: [],
+    // ---------- §7.2 记忆观察者（成长辅线，每章重置）----------
+    paused: false,                                     // 战斗暂停（buff 三选一弹层期间为 true）
+    obsLevel: 1,                                       // 观察者等级（每次选 buff 后 +1）
+    obsExp: 0,                                         // 当前累计经验（杀怪获得）
+    obsExpMax: obsExpFor(1),                           // 本级触发所需经验
+    buffs: { atk:1, spd:1, def:1, cool:1, eco:1 },     // 记忆 buff 全局增益（默认无增益）
   };
   for(const p of LEVEL.preplaced) placeTower(p.type, p.col, p.row, true);
+  const bo=document.getElementById('buffOverlay'); if(bo) bo.classList.add('hide');   // 清掉可能残留的 buff 弹层
+  updateObsHUD();
   rollShop();
   // 进入准备期：玩家布防，倒计时归零或点「开始战斗」进入第一波
   const sb=document.getElementById('startBattleBtn');
@@ -734,7 +870,7 @@ function step(dt){
       const redCells = G.towers.filter(t=>CELLS[t.type].role==='economic');
       if(redCells.length>0){
         // 红细胞合成后产能按 tier 放大（tier1 与旧值 15 完全一致，不破坏平衡）
-        const gain = redCells.reduce((s,t)=>s + BAL.redEnergyPer*Math.pow(TIER_MULT,(t.tier||1)-1), 0);
+        const gain = Math.round(redCells.reduce((s,t)=>s + BAL.redEnergyPer*Math.pow(TIER_MULT,(t.tier||1)-1), 0) * ((G.buffs&&G.buffs.eco)||1));   // 记忆buff：增产因子
         G.energy += gain;
         addFloater((1+LEVEL.cols)/2, 0.5, '红细胞产能 +'+gain+'⚡', '#ffd24a');
         tip(redCells.length+' 个红细胞结算能量 +'+gain);
@@ -758,14 +894,14 @@ function step(dt){
   const leaked = G.viruses.filter(v=>v.leaked);
   if(leaked.length){
     for(const v of leaked){
-      const add = VIRUSES[v.type].boss ? 1.5 : BAL.tempPerLeak;  // BOSS 漏掉体温暴涨
+      const add = (VIRUSES[v.type].boss ? 1.5 : BAL.tempPerLeak) * ((G.buffs&&G.buffs.def)||1);  // BOSS 漏掉体温暴涨；记忆buff：免疫坚壁减免
       G.temp += add;
       addFloater(LEVEL.exit.col+0.5, LEVEL.exit.row+0.5, '+'+add.toFixed(1)+'°', '#ff5c5c');
     }
     G.viruses = G.viruses.filter(v=>!v.leaked);
   }
-  // 体温自然下降
-  G.temp = Math.max(BAL.baseTemp, G.temp - BAL.coolPerSec*dt);
+  // 体温自然下降（记忆buff：退烧调节）
+  G.temp = Math.max(BAL.baseTemp, G.temp - BAL.coolPerSec*((G.buffs&&G.buffs.cool)||1)*dt);
   if(G.temp >= BAL.failTemp){ G.temp=BAL.failTemp; G.phase='lose'; endGame(false); return; }
 
   // 塔攻击
@@ -784,7 +920,7 @@ function step(dt){
     let best=null,bestProg=-1;
     for(const v of G.viruses){ const vp=virusPos(v); if(dist(c.x,c.y,vp.x,vp.y)<=d.range && v.prog>bestProg){ best=v; bestProg=v.prog; } }
     if(best){
-      const interval = 1/(d.atkSpeed*buff.spd);
+      const interval = 1/(d.atkSpeed*buff.spd*((G.buffs&&G.buffs.spd)||1));   // 记忆buff：速攻协同
       t.cd = interval;
       const perShot = (d.dps/d.atkSpeed) * buff.atk;
       dealDamage(best, perShot, t);
@@ -797,8 +933,15 @@ function step(dt){
       G.projectiles.push({ x0:c.x,y0:c.y, x1:bp.x,y1:bp.y, life:0.12, color:d.color });
     }
   }
-  // 清除死亡病毒
-  G.viruses = G.viruses.filter(v=>{ if(v.hp<=0){ addFloater(virusPos(v).x, virusPos(v).y, '✔', '#7dd3fc'); return false; } return true; });
+  // 清除死亡病毒（记忆观察者：杀怪攒经验，BOSS 给更多）
+  G.viruses = G.viruses.filter(v=>{
+    if(v.hp<=0){
+      addFloater(virusPos(v).x, virusPos(v).y, '✔', '#7dd3fc');
+      gainObsExp(VIRUSES[v.type].boss ? 8 : 1);
+      return false;
+    }
+    return true;
+  });
 
   // 特效衰减
   for(const p of G.projectiles) p.life-=dt;
@@ -811,7 +954,7 @@ function step(dt){
 
 function dealDamage(v, base, t){
   const m = (MATRIX[v.type] && MATRIX[v.type][t.type]) || 1.0;
-  v.hp -= base * m * v.vuln;
+  v.hp -= base * m * v.vuln * ((G&&G.buffs&&G.buffs.atk)||1);   // 记忆buff：火力强化
 }
 function addFloater(x,y,txt,color){ G.floaters.push({x,y,txt,color,life:0.9}); }
 
@@ -1062,6 +1205,7 @@ function updateHUD(){
   fever.style.opacity=glow;
   fever.style.boxShadow=`inset 0 0 ${40*glow}px ${18*glow}px rgba(239,68,68,${0.55*glow})`;
   document.getElementById('rerollBtn').classList.toggle('disabled', G.energy<15);
+  updateObsHUD();
 }
 
 // ---------- 商店渲染（含格子卡形状预览）----------
@@ -1492,7 +1636,7 @@ function loop(ts){
   let dt=(ts-lastT)/1000; lastT=ts;
   dt=Math.min(dt,0.05)*G.speed;
   _gameTime += dt;
-  if(G.phase==='wave'||G.phase==='gap'||G.phase==='prep') {
+  if(!G.paused && (G.phase==='wave'||G.phase==='gap'||G.phase==='prep')) {   // 观察者 buff 弹层期间暂停战斗
     try { step(dt); } catch(e) {
       console.error('[step] CRASH @ t='+_gameTime.toFixed(2)+'s:', e.message, e.stack);
       G.running = false;

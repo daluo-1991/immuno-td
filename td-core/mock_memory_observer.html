@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>记忆观察者 · UI 草图</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; background:#0a0d14; color:#e6e9ef; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; padding:24px; }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size:18px; font-weight:600; margin:0 0 4px; }
+  .sub { color:#8b94a7; font-size:13px; margin:0 0 18px; }
+  .flow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:#161b26; border:1px solid #2a3142; border-radius:12px; padding:12px 14px; font-size:12.5px; color:#aeb6c6; margin-bottom:22px; }
+  .flow b { color:#6ee7a8; font-weight:600; }
+  .flow .arr { color:#5f6b80; }
+  .cols { display:grid; grid-template-columns: 380px 1fr; gap:22px; align-items:start; }
+  @media (max-width:760px){ .cols{ grid-template-columns:1fr; } }
+  .phone { background:#0e1117; border:1px solid #2a3142; border-radius:18px; padding:12px; width:380px; }
+  .hud { display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#aeb6c6; background:#161b26; border-radius:8px; padding:6px 10px; margin-bottom:8px; }
+  .hud .hot { color:#ef4444; }
+  .board { position:relative; background:#0b0f17; border:1px solid #1d2433; border-radius:10px; height:300px; overflow:hidden; }
+  .path { position:absolute; inset:0; }
+  .cell { position:absolute; width:26px; height:26px; border-radius:5px; }
+  .green { background:rgba(110,231,168,.16); border:1px solid rgba(110,231,168,.45); }
+  .dark { background:#11161f; border:1px dashed #2a3142; }
+  .tower { display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:#0a0d14; }
+  .t-g { background:#6ee7a8; } .t-r { background:#ef9f27; } .t-b { background:#7f77dd; }
+  .num { position:absolute; top:-7px; left:-7px; width:16px; height:16px; border-radius:50%; background:#ffd24a; color:#0a0d14; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .shop { margin-top:10px; background:#161b26; border-radius:10px; padding:8px; }
+  .slots { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .slot { height:42px; border-radius:7px; background:#0e1117; border:1px solid #2a3142; display:flex; align-items:center; justify-content:center; font-size:10px; color:#aeb6c6; }
+  .slot.tile { border-color:#5dc9f0; color:#9fe1ef; }
+  .btns { display:flex; gap:6px; margin-top:8px; }
+  .btn { flex:1; font-size:11px; padding:7px 4px; border-radius:7px; border:1px solid #2a3142; background:#0e1117; color:#cfd5e2; text-align:center; }
+  .btn.acc { border-color:#6ee7a8; color:#6ee7a8; }
+  .obs { margin-top:10px; background:linear-gradient(180deg,#1a1730,#161b26); border:1px solid #534ab7; border-radius:10px; padding:9px 10px; }
+  .obs-top { display:flex; align-items:center; gap:8px; }
+  .obs-ic { width:30px; height:30px; border-radius:8px; background:#534ab7; color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; }
+  .obs-name { font-size:12px; font-weight:600; }
+  .obs-sub { font-size:10.5px; color:#9aa3b8; }
+  .bar { height:7px; border-radius:4px; background:#0e1117; margin-top:7px; overflow:hidden; }
+  .bar > i { display:block; height:100%; width:60%; background:#a78bfa; }
+  .bar-tx { font-size:10px; color:#bcaaf0; text-align:right; margin-top:3px; }
+  .panel-title { font-size:13px; font-weight:600; margin:0 0 10px; color:#cfd5e2; }
+  .overlay { background:rgba(8,11,18,.72); border:1px solid #2a3142; border-radius:14px; padding:16px; }
+  .ov-h { font-size:13px; font-weight:600; text-align:center; margin:0 0 3px; }
+  .ov-s { font-size:11px; color:#8b94a7; text-align:center; margin:0 0 14px; }
+  .cards { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .card { background:#161b26; border:1px solid #2a3142; border-radius:11px; padding:12px 11px; text-align:center; cursor:pointer; }
+  .card:hover { border-color:#6ee7a8; }
+  .c-ic { width:38px; height:38px; border-radius:10px; margin:0 auto 8px; display:flex; align-items:center; justify-content:center; font-size:17px; font-weight:700; }
+  .c-atk { background:rgba(239,68,68,.18); color:#f09595; }
+  .c-def { background:rgba(56,138,221,.18); color:#85b7eb; }
+  .c-eco { background:rgba(250,199,39,.18); color:#fac775; }
+  .c-name { font-size:12.5px; font-weight:600; margin:0 0 4px; }
+  .c-val { font-size:13px; font-weight:700; }
+  .c-desc { font-size:10.5px; color:#8b94a7; margin:4px 0 0; line-height:1.4; }
+  .legend { margin-top:22px; background:#161b26; border:1px solid #2a3142; border-radius:12px; padding:14px 16px; font-size:12px; color:#aeb6c6; line-height:1.7; }
+  .legend b { color:#e6e9ef; }
+  .k { display:inline-block; width:16px; height:16px; border-radius:50%; background:#ffd24a; color:#0a0d14; font-size:10px; font-weight:700; text-align:center; line-height:16px; margin-right:6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>记忆观察者 · UI 草图</h1>
+  <p class="sub">§7.2 成长辅线 —— 观察者不上场，击杀病毒攒经验，满弹触发 3 选 1 buff。下图仅为布局示意，数值/文案可改。</p>
+
+  <div class="flow">
+    <span>击杀病毒</span><span class="arr">→</span><span><b>观察者</b>攒经验</span><span class="arr">→</span><span>经验满 <b>100</b></span><span class="arr">→</span><span>弹出 <b>3 选 1</b></span><span class="arr">→</span><span>buff <b>本局持续</b></span>
+  </div>
+
+  <div class="cols">
+    <!-- 左：战斗界面 -->
+    <div class="phone">
+      <div class="hud">
+        <span>第 1-1 章</span>
+        <span>第 3 / 8 波</span>
+        <span class="hot">体温 37.0°</span>
+        <span>⚡ 45</span>
+      </div>
+      <div class="board">
+        <svg class="path" viewBox="0 0 380 300" preserveAspectRatio="none">
+          <path d="M0,40 H300 V150 H80 V260 H380" fill="none" stroke="#2a3142" stroke-width="10" stroke-linecap="round"/>
+          <path d="M0,40 H300 V150 H80 V260 H380" fill="none" stroke="#3a4458" stroke-width="2" stroke-dasharray="4 6" opacity="0.6"/>
+        </svg>
+        <!-- 暗格示意 -->
+        <div class="cell dark" style="left:150px;top:60px"></div>
+        <div class="cell dark" style="left:176px;top:60px"></div>
+        <!-- 绿格（可摆位） -->
+        <div class="cell green" style="left:150px;top:120px"></div>
+        <div class="cell green" style="left:176px;top:120px"></div>
+        <div class="cell green" style="left:150px;top:146px"></div>
+        <div class="cell green" style="left:176px;top:146px"></div>
+        <!-- 塔 -->
+        <div class="cell tower t-g" style="left:150px;top:120px">巨</div>
+        <div class="cell tower t-r" style="left:176px;top:146px">红</div>
+        <!-- 标注 -->
+        <div class="num" style="left:140px;top:110px">1</div>
+        <div class="num" style="left:200px;top:200px">2</div>
+      </div>
+
+      <div class="shop">
+        <div class="slots">
+          <div class="slot tile">格子卡</div>
+          <div class="slot">中性粒</div>
+          <div class="slot">T细胞</div>
+          <div class="slot">抗体</div>
+        </div>
+        <div class="btns">
+          <div class="btn">🔄 刷新 ⚡15</div>
+          <div class="btn">▶ 1×</div>
+          <div class="btn acc">⚡ 合成 (2)</div>
+        </div>
+      </div>
+
+      <!-- 记忆观察者 HUD -->
+      <div class="obs">
+        <div class="obs-top">
+          <div class="obs-ic">🧠</div>
+          <div>
+            <div class="obs-name">记忆观察者 · Lv.2</div>
+            <div class="obs-sub">击杀病毒积累记忆经验</div>
+          </div>
+        </div>
+        <div class="bar"><i></i></div>
+        <div class="bar-tx">60 / 100</div>
+        <div class="num" style="position:static; margin-top:8px;">3</div>
+      </div>
+    </div>
+
+    <!-- 右：满弹弹层 -->
+    <div>
+      <p class="panel-title">满弹时弹出（暂停战斗 / 半透明遮罩）</p>
+      <div class="overlay">
+        <p class="ov-h">记忆已满 · 选择强化</p>
+        <p class="ov-s">每轮仅触发一次，三选一后立即生效</p>
+        <div class="cards">
+          <div class="card">
+            <div class="c-ic c-atk">⚔</div>
+            <p class="c-name">攻击强化</p>
+            <p class="c-val" style="color:#f09595">+15% 输出</p>
+            <p class="c-desc">全体细胞 dps / 攻击速度提升</p>
+          </div>
+          <div class="card">
+            <div class="c-ic c-def">🛡</div>
+            <p class="c-name">防御强化</p>
+            <p class="c-val" style="color:#85b7eb">+15% 减伤</p>
+            <p class="c-desc">基地体温流失速度降低</p>
+          </div>
+          <div class="card">
+            <div class="c-ic c-eco">💰</div>
+            <p class="c-name">经济强化</p>
+            <p class="c-val" style="color:#fac775">+20% 能量</p>
+            <p class="c-desc">每波结算红细胞产出提升</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <p style="margin:0 0 8px; color:#cfd5e2; font-weight:600;">标注说明</p>
+        <p style="margin:0"><span class="k">1</span><b>摆位区</b>：仅绿格可放细胞（暗格需格子卡开通），观察者<b>不占摆位</b>。</p>
+        <p style="margin:6px 0 0"><span class="k">2</span><b>合成按钮</b>：已做完，同型同级可合，每点一次升一阶。</p>
+        <p style="margin:6px 0 0"><span class="k">3</span><b>观察者 HUD</b>：固定出现在商店下方；经验条满即弹 3 选 1。<br>&nbsp;&nbsp;→ 点击任意一张卡即生效并关闭，战斗继续。</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
