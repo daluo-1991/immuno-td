@@ -49,7 +49,7 @@ api.start();
 let pass=0, fail=0;
 function ok(name, cond){ if(cond){pass++; console.log('  ✅ '+name);} else {fail++; console.log('  ❌ '+name);} }
 const isGridCard = it => it!==null && typeof it==='object' && it.cells;
-const isCellCard  = it => typeof it==='string' && api.CELLS[it];
+const isCellCard  = it => (typeof it==='string' && api.CELLS[it]) || (it && typeof it==='object' && !it.cells && api.CELLS[it.type]);
 
 // ① 首槽恒出格子卡（200 次刷新）
 console.log('=== 首槽恒为格子卡（200 次刷新）===');

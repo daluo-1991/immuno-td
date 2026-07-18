@@ -171,6 +171,7 @@ const CELLS = {
 // ---------- §7 合成主线：同型同级 2合1 → tier+1 ----------
 // 占位尺寸不变（“不压缩格子”天然满足），属性按阶递增。
 const TIER_MULT = 1.7;   // 每升一阶：dps / 能量 / 光环 / 减益 主数值倍率
+const MAX_TIER  = 3;      // 满级阶数（合成上限）：商店最多刷到 MAX_TIER-1，满级只能靠合成拿到
 function eff(t){
   const d = CELLS[t.type];
   const k = t.tier || 1;
@@ -553,7 +554,21 @@ function weightedPick(){
 //   · 三层资源：格子卡（开通暗格）/ 细胞卡（摆塔，免费）/ 能量（仅🔄刷新）。
 //   · 棋盘仅中央 3×3 开局开通，其余 26 内格为 'locked' 暗格 → 格子卡有用（整块点入暗格即开通）。
 //   · 格子卡为点击放置（非拖拽）：选卡 → 点深色暗格整块放入（见 handleTap）。
-function rollShop(){ G.shop = [pickTileShape(), weightedPick(), weightedPick(), weightedPick()]; G.selected=-1; renderShop(); }
+//   · 细胞卡按章节概率刷出高阶（tier2 等）：商店最多刷到 MAX_TIER-1，满级只能靠合成拿到。
+function shopTier(ch){
+  const cap = MAX_TIER - 1;                 // 商店不直接出满级
+  if(cap < 2) return 1;
+  const p2 = Math.min(0.5, 0.20 + 0.06*ch); // 章节越高，刷到 2 级卡概率越大（ch0:20% … ch5:50%）
+  let tier = (Math.random() < p2) ? 2 : 1;
+  if(cap >= 3 && tier===2 && Math.random() < (0.10 + 0.04*ch)) tier = 3;  // 更深阶仅在 MAX_TIER>=4 时偶尔出现
+  return Math.min(tier, cap);
+}
+function rollShopCard(){
+  const type = weightedPick();
+  const tier = shopTier(G.chapterIdx||0);
+  return tier>=2 ? { type, tier } : type;   // tier1 仍用字符串，tier>=2 用 {type,tier} 对象
+}
+function rollShop(){ G.shop = [pickTileShape(), rollShopCard(), rollShopCard(), rollShopCard()]; G.selected=-1; renderShop(); }
 
 // ---------- 波次 ----------
 function startWave(i){
@@ -803,7 +818,7 @@ function render(){
         if(cc<1||cc>LEVEL.cols-2||rr<1||rr>LEVEL.rows-2){ outOfBounds=true; continue; }
         const v=G.grid[rr] && G.grid[rr][cc];
         if(v==='locked') hasDark=true;
-        else if(v && typeof v==='object'){ hasTower=true; if(v.type===type && (v.tier||1)===cardTier(card)) isMerge=true; }
+        else if(v && typeof v==='object'){ hasTower=true; if(v.type===type && (v.tier||1)===cardTier(card) && cardTier(card) < MAX_TIER) isMerge=true; }
       }
       ax = drag.hoverC; ay = drag.hoverR;
       if(outOfBounds || hasDark){ valid=false; }
@@ -814,8 +829,8 @@ function render(){
       const ev = anchorForWithEvict(type, drag.hoverC, drag.hoverR, t);
       valid = !!ev;
       isSwap = !!ev && ev.targets.length>0;
-      // 拖动塔落到的塔集合里若有“同型同级”者 → 合成（最高优先级）
-      if(ev && ev.targets.some(tg=>tg.type===type && (tg.tier||1)===(t.tier||1))) isMerge=true;
+      // 拖动塔落到的塔集合里若有“同型同级”者 → 合成（最高优先级）；封顶：已满级不显示合成
+      if((t.tier||1) < MAX_TIER && ev && ev.targets.some(tg=>tg.type===type && (tg.tier||1)===(t.tier||1))) isMerge=true;
       ax = ev ? ev.anchor.ac : drag.hoverC;
       ay = ev ? ev.anchor.ar : drag.hoverR;
     }
@@ -1181,7 +1196,8 @@ function tryMoveOrSwap(t, c, r){
   }
   const { anchor:a, targets } = res;
   // 合成优先（§7 合成主线）：拖动的塔(t.type,t.tier) 落到“同型同级”塔 → 合成（source 被吸收，目标升阶）
-  const merge = findMergeTarget(t.type, t.tier||1, targets);
+  //   封顶：已达 MAX_TIER 的塔不可再被合成升阶
+  const merge = (t.tier||1) < MAX_TIER ? findMergeTarget(t.type, t.tier||1, targets) : null;
   if(merge){
     removeTowerFromGrid(t);                  // 清 source 占位（函数开头已移除，double safe）
     G.towers = G.towers.filter(x=>x!==t);    // source 被融合吸收
@@ -1286,7 +1302,8 @@ function trySwap(slotIdx, card, c, r){
   }
 
   // ②b 合成优先（§7 合成主线）：商店卡(带自身tier)落到“同型同级”场上塔 → 合成升阶
-  const merge = findMergeTarget(newType, newTier, targets);
+  //   封顶：已达 MAX_TIER 的卡不可再被合成升阶
+  const merge = newTier < MAX_TIER ? findMergeTarget(newType, newTier, targets) : null;
   if(merge){
     merge.tier = (merge.tier||1) + 1;
     G.shop.splice(slotIdx, 1);
