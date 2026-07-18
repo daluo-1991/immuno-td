@@ -380,6 +380,32 @@ function placeFailReason(type,col,row){
   return null;
 }
 
+// 详细诊断：列出 (c,r) 处 size×size 所有可能落点覆盖到的「异常格」（暗格/占用/通道/越界），
+// 方便玩家自助定位「为什么放不下」（而非笼统的「周围被占用/越界」）。
+function diagnosePlacement(type, c, r){
+  const s = CELLS[type].size;
+  const issues = [];
+  const seen = new Set();
+  for(let dr=0; dr<s; dr++) for(let dc=0; dc<s; dc++){
+    const ac=c-dc, ar=r-dr;
+    if(ac<1 || ar<1) continue;
+    if(!grid_in(ac,ar) || !grid_in(ac+s-1, ar+s-1)) continue;
+    for(let ddr=0; ddr<s; ddr++) for(let ddc=0; ddc<s; ddc++){
+      const gc=ac+ddc, gr=ar+ddr;
+      const key=gc+','+gr;
+      if(seen.has(key)) continue; seen.add(key);
+      if(!grid_in(gc,gr)){ issues.push(`${gc}列${gr}行 超出棋盘`); continue; }
+      if(gc<1||gc>LEVEL.cols-2||gr<1||gr>LEVEL.rows-2){ issues.push(`${gc}列${gr}行 在外圈通道`); continue; }
+      const g=G.grid[gr][gc];
+      if(g===null) continue;
+      if(typeof g==='object') issues.push(`${gc}列${gr}行 被「${CELLS[g.type].name}」占用`);
+      else if(g==='locked') issues.push(`${gc}列${gr}行 是暗格(需格子卡开通)`);
+      else issues.push(`${gc}列${gr}行 不可摆放`);
+    }
+  }
+  return issues;
+}
+
 // 移动已有塔的失败原因（其自身当前占格视为 OK，避免误报“已被占用”）
 function moveFailReason(t,col,row){
   const d = CELLS[t.type];
@@ -1090,9 +1116,10 @@ function trySwap(slotIdx, newType, c, r){
   // 统一 anchorForWithEvict：空格→摆放(targets=[])，覆盖塔→顶掉(targets=[塔])
   const res = anchorForWithEvict(newType, c, r, null);
   if(!res){
-    const reason = placeFailReason(newType, c, r);
+    const issues = diagnosePlacement(newType, c, r);
+    const reason = issues.length ? issues.slice(0,4).join('；') : '目标位置无法摆放';
     console.log('[SW] FAIL', reason);
-    tip('放不下：'+(reason||'目标位置周围被占用（暗格或越界）'));
+    tip('放不下：'+reason);
     return;
   }
   console.log('[SW] OK →', res.anchor, 'top=', res.targets.map(x=>x.type+'@'+x.col+','+x.row));
