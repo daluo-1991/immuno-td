@@ -327,7 +327,7 @@ function anchorForCore(type, c, r, wide){
   const tAc = c - (s-1)/2, tAr = r - (s-1)/2;
   const aMin=1, aMax=LEVEL.cols-s-1, bMin=1, bMax=LEVEL.rows-s-1;
   if(aMax<aMin || bMax<bMin) return null;
-  const R = s; // 宽搜索半径（锚点空间）：2×2 → ±2 锚点
+  const R = s + 1; // 宽搜索半径：2×2 → ±3 锚点 // 宽搜索半径（锚点空间）：2×2 → ±2 锚点
   const acLo = wide ? Math.max(aMin, Math.floor(tAc)-R) : Math.max(aMin, c-(s-1));
   const acHi = wide ? Math.min(aMax, Math.ceil(tAc)+R)  : Math.min(aMax, c);
   const arLo = wide ? Math.max(bMin, Math.floor(tAr)-R) : Math.max(bMin, r-(s-1));
@@ -337,7 +337,12 @@ function anchorForCore(type, c, r, wide){
     if(!canPlace(type, ac, ar)) continue;
     const score = Math.abs(ac - tAc) + Math.abs(ar - tAr);
     const sum = ac + ar;
-    if(score < bestScore || (score===bestScore && sum > bestSum)){
+    // 优先选择 footprint 覆盖鼠标点击格 (c,r) 的锚点；同分/同覆盖时偏向右下
+    const coversClick = (c >= ac && c < ac+s && r >= ar && r < ar+s);
+    const bestCovers = best ? (c >= best.ac && c < best.ac+s && r >= best.ar && r < best.ar+s) : false;
+    if(coversClick && !bestCovers){
+      bestScore=score; bestSum=sum; best={ ac, ar };
+    } else if((coversClick===bestCovers) && (score < bestScore || (score===bestScore && sum > bestSum))){
       bestScore=score; bestSum=sum; best={ ac, ar };
     }
   }
@@ -357,12 +362,13 @@ function anchorForWithEvictCore(type, c, r, exclude, wide){
   const tAc = c - (s-1)/2, tAr = r - (s-1)/2;
   const aMin=1, aMax=LEVEL.cols-s-1, bMin=1, bMax=LEVEL.rows-s-1;
   if(aMax<aMin || bMax<bMin) return null;
-  const R = s;
+  const R = s + 1; // 宽搜索半径：2×2 → ±3 锚点
   const acLo = wide ? Math.max(aMin, Math.floor(tAc)-R) : Math.max(aMin, c-(s-1));
   const acHi = wide ? Math.min(aMax, Math.ceil(tAc)+R)  : Math.min(aMax, c);
   const arLo = wide ? Math.max(bMin, Math.floor(tAr)-R) : Math.max(bMin, r-(s-1));
   const arHi = wide ? Math.min(bMax, Math.ceil(tAr)+R)  : Math.min(bMax, r);
-  let best=null, bestScore=1e9, bestSum=-1e9, bestTargets=[];
+  const hoverTower = (G.grid[r] && G.grid[r][c] && typeof G.grid[r][c] === 'object' && G.grid[r][c] !== exclude) ? G.grid[r][c] : null;
+  let best=null, bestRank=-1, bestScore=1e9, bestSum=-1e9, bestTargets=[];
   for(let ar=arLo; ar<=arHi; ar++) for(let ac=acLo; ac<=acHi; ac++){
     if(!grid_in(ac, ar) || !grid_in(ac+s-1, ar+s-1)) continue;
     let inside=true;
@@ -381,8 +387,23 @@ function anchorForWithEvictCore(type, c, r, exclude, wide){
     if(!ok) continue;
     const score = Math.abs(ac - tAc) + Math.abs(ar - tAr);
     const sum = ac + ar;
-    if(score < bestScore || (score===bestScore && sum > bestSum)){
-      bestScore=score; bestSum=sum; best={ac, ar}; bestTargets=targets;
+    const coversClick = (c >= ac && c < ac+s && r >= ar && r < ar+s);
+    const bestCovers = best ? (c >= best.ac && c < best.ac+s && r >= best.ar && r < best.ar+s) : false;
+    // 当鼠标在目标塔上时，优先选择能完全覆盖那座塔的锚点（顶掉意图）
+    let rank=0;
+    if(hoverTower){
+      let fullCover=true;
+      for(let dr=0; dr<hoverTower.size; dr++) for(let dc=0; dc<hoverTower.size; dc++){
+        const hc=hoverTower.col+dc, hr=hoverTower.row+dr;
+        if(!(hc>=ac && hc<ac+s && hr>=ar && hr<ar+s)){ fullCover=false; break; }
+      }
+      if(fullCover) rank+=100;
+      else if(targets.includes(hoverTower)) rank+=50;
+    }
+    if(rank > bestRank ||
+       (rank===bestRank && coversClick && !bestCovers) ||
+       (rank===bestRank && (coversClick===bestCovers) && (score < bestScore || (score===bestScore && sum > bestSum)))){
+      bestRank=rank; bestScore=score; bestSum=sum; best={ac, ar}; bestTargets=targets;
     }
   }
   return best ? { anchor: best, targets: bestTargets } : null;
@@ -514,7 +535,6 @@ let _lastDt=0, _stepCount=0;
 function step(dt){
   _lastDt = dt;
   _stepCount++;
-  if(_stepCount<=3) console.log(`[step #${_stepCount}] dt=${dt.toFixed(4)} phase=${G.phase} spawnLeft=${G.spawnLeft} viruses=${G.viruses.length} running=${G.running}`);
   // 准备期：仅倒计时，不出怪不结算
   if(G.phase==='prep'){
     G.prepTimer -= dt;
@@ -949,9 +969,7 @@ document.addEventListener('pointerup', e=>{
   if(d.kind==='tower'){
     if(d.moved){
       const {c,r}=cvXY(e);
-      console.log('[PU] drag-tower', d.tower.type, d.tower.col, d.tower.row, '→', c, r);
       const result = tryMoveOrSwap(d.tower, c, r);
-      console.log('[PU] result', result);
       if(result.msg) tip(result.msg);
     } else if(G.selected>=0){
       // 已选商店卡且未拖动：交给点选逻辑（替换/摆放）
@@ -966,7 +984,6 @@ document.addEventListener('pointerup', e=>{
     const item=G.shop[d.slotIdx];
     if(item===null || (typeof item==='object' && item.cells)){ tip('卡片已失效'); return; }
     const type=item;
-    console.log('[PU] drag-shop', type, '→', c, r);
     trySwap(d.slotIdx, type, c, r);   // 统一：空格→摆放，塔上/塔旁→顶掉
   }
 });
@@ -1067,14 +1084,12 @@ function tryMoveOrSwap(t, c, r){
   if(!res){
     restoreTowerToGrid(t);
     const reason = moveFailReason(t, c, r);
-    console.log('[MV] FAIL', t.type, t.col, t.row, '→', c, r, '|', reason);
     return { ok:false, msg:'目标位置无法摆放：'+(reason||'周围被占用或超出范围') };
   }
   const { anchor:a, targets } = res;
   // 没动：新落点就是原位，且没有顶掉任何塔
   if(a.ac===t.col && a.ar===t.row && targets.length===0){
     restoreTowerToGrid(t);
-    console.log('[MV] NOOP 位置没变', t.type, t.col, t.row);
     return { ok:false, msg:'位置没变' };
   }
   // 互换：仅一座同尺寸目标塔且落点对齐它 → 两塔互换位置，不退回商店
@@ -1087,13 +1102,11 @@ function tryMoveOrSwap(t, c, r){
       for(let dr=0;dr<t.size;dr++)for(let dc=0;dc<t.size;dc++) G.grid[a.ar+dr][a.ac+dc]=t;
       other.col = oldAc; other.row = oldAr;       // B → A 原位
       for(let dr=0;dr<other.size;dr++)for(let dc=0;dc<other.size;dc++) G.grid[oldAr+dr][oldAc+dc]=other;
-      console.log('[MV] SWAP', t.type, '@', a.ac, a.ar, '↔', other.type, '@', oldAc, oldAr);
       renderShop(); updateHUD();
       return { ok:true, swapped:true, msg:'' };
     }
     restoreTowerToGrid(other);                    // 互换不成，恢复 B，走顶掉
   }
-  console.log('[MV] OK', t.type, '→', a.ac, a.ar, 'top=', targets.map(x=>x.type+'@'+x.col+','+x.row));
   // 被覆盖的塔：优先挪到 source 原位腾出的空格，挪不下的才退回商店
   const oldAc=t.col, oldAr=t.row;
   for(const target of targets) removeTowerFromGrid(target);
@@ -1136,17 +1149,14 @@ function tryMoveOrSwap(t, c, r){
 }
 // 触发：任何时候都允许；边界：仅细胞卡 / 顶回塔保留类型（L1 无等级）
 function trySwap(slotIdx, newType, c, r){
-  console.log('[SW]', slotIdx, newType, '→', c, r);
   // 统一 anchorForWithEvict：空格→摆放(targets=[])，覆盖塔→顶掉(targets=[塔])
   const res = anchorForWithEvict(newType, c, r, null);
   if(!res){
     const issues = diagnosePlacement(newType, c, r);
     const reason = issues.length ? issues.slice(0,4).join('；') : '目标位置无法摆放';
-    console.log('[SW] FAIL', reason);
     tip('放不下：'+reason);
     return;
   }
-  console.log('[SW] OK →', res.anchor, 'top=', res.targets.map(x=>x.type+'@'+x.col+','+x.row));
   const { anchor:a, targets } = res;
   for(const target of targets) removeTowerFromGrid(target);
   G.towers = G.towers.filter(t=>!targets.includes(t));
@@ -1226,15 +1236,9 @@ function start(){
     _lastDt = 0;
     updateHUD();
     renderShop();
-    // 强制验证
-    console.log('[start] ✅ OK — running:', G.running, 'phase:', G.phase, 'spawnLeft:', G.spawnLeft,
-      'shopLen:', G.shop?.length, 'towers:', G.towers?.length);
     // 二次保险：下一帧再确认 running（防止被某处异步重置）
     setTimeout(()=>{
-      if(G && !G.running){
-        console.warn('[start] ⚠️ running 被重置为 false！强制恢复');
-        G.running = true;
-      }
+      if(G && !G.running) G.running = true;
     }, 100);
   } catch(e) {
     console.error('[start] CRASH:', e.message, e.stack);
