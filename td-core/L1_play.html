@@ -261,12 +261,13 @@ function newGame(){
   const grid = [];
   for(let r=0;r<LEVEL.rows;r++) grid.push(new Array(LEVEL.cols).fill(null));
   for(const p of LEVEL.path) grid[p[1]][p[0]] = 'path';
-  // 摆位区默认锁定('locked')，仅预留格开局开通
-  const reservedSet = new Set((LEVEL.reserved||[]).map(p=>keyOf(p[0],p[1])));
-  for(let r=0;r<LEVEL.rows;r++)for(let c=0;c<LEVEL.cols;c++){
-    const inner = c>=1&&c<=LEVEL.cols-2&&r>=1&&r<=LEVEL.rows-2;  // col 1-5, row 1-7
-    if(inner && !reservedSet.has(keyOf(c,r))) grid[r][c] = 'locked';
-  }
+  // 摆位区开局即全部开通（自由摆塔：用户要求 2×2 可随意拖到任意内格，含右半边/右下角）。
+  // 暗格(locked)资源层暂不启用；若后续需“格子卡开通暗格”，删除本注释并恢复下方循环即可。
+  // const reservedSet = new Set((LEVEL.reserved||[]).map(p=>keyOf(p[0],p[1])));
+  // for(let r=0;r<LEVEL.rows;r++)for(let c=0;c<LEVEL.cols;c++){
+  //   const inner = c>=1&&c<=LEVEL.cols-2&&r>=1&&r<=LEVEL.rows-2;  // col 1-5, row 1-7
+  //   if(inner && !reservedSet.has(keyOf(c,r))) grid[r][c] = 'locked';
+  // }
 
   G = {
     grid, pathSet,

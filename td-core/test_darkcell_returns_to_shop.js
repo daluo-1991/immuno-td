@@ -65,8 +65,9 @@ function findGreen2x2Anchor(G){
 console.log('=== 2×2 严格模式：暗格松手 → 卡片退回商店 ===');
 api.start(); TIP=[];
 let G = api.getG();
-let d = findDark(G);
-console.log(`  选暗格 (${d.c},${d.r})，状态=${JSON.stringify(G.grid[d.r][d.c])}`);
+// 手动注入一个暗格（模拟格子卡尚未开通的格），验证退商店逻辑仍有效（开局内格现已全开）
+let d = {c:1,r:1}; G.grid[d.r][d.c] = 'locked';
+console.log(`  注入暗格 (${d.c},${d.r})，状态=${JSON.stringify(G.grid[d.r][d.c])}`);
 ok('选定位置确为暗格(locked)', isLocked(G,d.c,d.r));
 G.shop = ['macrophage', null, null, null];
 api.renderShop();
@@ -98,7 +99,7 @@ ok('落点 4 格均非暗格（即落在全绿 2×2 区域内）', mac2 && !isLo
 console.log('=== 暗格松手 → 卡片退回商店（1×1 中性粒） ===');
 api.start(); TIP=[];
 G = api.getG();
-d = findDark(G);
+d = {c:5,r:7}; G.grid[d.r][d.c] = 'locked';
 G.shop = ['neutrophil', null, null, null];
 api.renderShop();
 G.selected = -1;
