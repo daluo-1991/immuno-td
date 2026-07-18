@@ -65,7 +65,7 @@ function findGreen2x2Anchor(G){
 console.log('=== 2×2 严格模式：暗格松手 → 卡片退回商店 ===');
 api.start(); TIP=[];
 let G = api.getG();
-// 手动注入一个暗格（模拟格子卡尚未开通的格），验证退商店逻辑仍有效（开局内格现已全开）
+// 手动注入一个暗格（验证退商店逻辑；3×3 中央簇外已有大量暗格可直接测）
 let d = {c:1,r:1}; G.grid[d.r][d.c] = 'locked';
 console.log(`  注入暗格 (${d.c},${d.r})，状态=${JSON.stringify(G.grid[d.r][d.c])}`);
 ok('选定位置确为暗格(locked)', isLocked(G,d.c,d.r));
