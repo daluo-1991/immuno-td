@@ -1,7 +1,7 @@
 // 验证：拖动场上塔到空绿格移动（tryMoveOrSwap 普通移动，不消耗商店卡、不顶掉）
 const fs = require('fs');
 const vm = require('vm');
-const html = fs.readFileSync('immuno-td/td-core/L1_play.html', 'utf-8');
+const html = fs.readFileSync('L1_play.html', 'utf-8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 function makeEl(id){

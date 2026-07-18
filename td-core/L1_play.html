@@ -368,6 +368,24 @@ function anchorForWithEvictCore(type, c, r, exclude, wide){
   const arLo = wide ? Math.max(bMin, Math.floor(tAr)-R) : Math.max(bMin, r-(s-1));
   const arHi = wide ? Math.min(bMax, Math.ceil(tAr)+R)  : Math.min(bMax, r);
   const hoverTower = (G.grid[r] && G.grid[r][c] && typeof G.grid[r][c] === 'object' && G.grid[r][c] !== exclude) ? G.grid[r][c] : null;
+  // ★ 同尺寸顶掉优先（保证 2×2 拖到已有 2×2 上必能替换）：
+  // 若鼠标落在某座“同尺寸塔”的 footprint 内，且该塔原位清掉后即全空、且在内格摆位区，
+  // 直接以该塔原位置为锚点返回，跳过宽窗口打分，杜绝任何边缘/排序导致失败。
+  if(hoverTower && hoverTower.size===s){
+    const aac=hoverTower.col, aar=hoverTower.row;
+    let okRegion=true;
+    for(let ddr=0; ddr<s; ddr++)for(let ddc=0; ddc<s; ddc++){
+      const gc=aac+ddc, gr=aar+ddr;
+      if(gc<1||gc>LEVEL.cols-2||gr<1||gr>LEVEL.rows-2){ okRegion=false; break; }
+    }
+    if(okRegion){
+      removeTowerFromGrid(hoverTower);
+      let allNull=true;
+      for(let ddr=0; ddr<s; ddr++)for(let ddc=0; ddc<s; ddc++){ if(G.grid[aar+ddr][aac+ddc]!==null){ allNull=false; break; } }
+      restoreTowerToGrid(hoverTower);
+      if(allNull) return { anchor:{ac:aac, ar:aar}, targets:[hoverTower] };
+    }
+  }
   let best=null, bestRank=-1, bestScore=1e9, bestSum=-1e9, bestTargets=[];
   for(let ar=arLo; ar<=arHi; ar++) for(let ac=acLo; ac<=acHi; ac++){
     if(!grid_in(ac, ar) || !grid_in(ac+s-1, ar+s-1)) continue;
@@ -950,6 +968,7 @@ function startShopDrag(i, e){
   if(item===null || (typeof item==='object' && item.cells)) return; // 空槽/格子卡不拖
   drag={ kind:'shop', slotIdx:i, type:item, moved:false, sx:e.clientX, sy:e.clientY, hoverC:null, hoverR:null };
   e.preventDefault();
+  try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}  // 锁定指针，避免拖动中被中断/丢事件
 }
 
 // 全局 pointermove / pointerup 统一处理：移动塔 / 拖商店卡 / 点击落子

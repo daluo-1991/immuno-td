@@ -1,6 +1,6 @@
 // 验证：拖商店同类型卡到场上同类型塔，周围暗格无法移动时 → 回退替换（顶掉）
 const fs = require('fs'), vm = require('vm');
-const html = fs.readFileSync('immuno-td/td-core/L1_play.html', 'utf-8');
+const html = fs.readFileSync('L1_play.html', 'utf-8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 function makeEl(id){ return { id,_children:[],textContent:'',innerHTML:'',value:'',width:336,height:432,style:new Proxy({},{get:()=>'',set:()=>true}),classList:{_s:new Set(),add(c){this._s.add(c)},remove(c){this._s.delete(c)},toggle(c,f){f?this._s.add(c):this._s.delete(c)},contains(c){return this._s.has(c)}},onclick:null,addEventListener(){},removeEventListener(){},appendChild(c){this._children.push(c)},get childElementCount(){return this._children.length},getContext(){return ctxStub},getBoundingClientRect(){return{left:0,top:0,width:336,height:432}},setPointerCapture(){},releasePointerCapture(){} }; }
 const ctxStub = new Proxy({}, { get(){ return ()=>{}; }});

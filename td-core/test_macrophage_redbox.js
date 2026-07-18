@@ -1,7 +1,7 @@
 // 复现用户场景：右上角 2x2 红框，4格已开通，右下角有中性粒，从商店拖巨噬进去
 const fs = require('fs');
 const vm = require('vm');
-const html = fs.readFileSync('immuno-td/td-core/L1_play.html', 'utf-8');
+const html = fs.readFileSync('L1_play.html', 'utf-8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 function makeEl(id){

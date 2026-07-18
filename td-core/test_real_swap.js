@@ -3,7 +3,7 @@
 const fs = require('fs');
 const vm = require('vm');
 
-const html = fs.readFileSync('immuno-td/td-core/L1_play.html', 'utf-8');
+const html = fs.readFileSync('L1_play.html', 'utf-8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 // ---- DOM 打桩 ----
