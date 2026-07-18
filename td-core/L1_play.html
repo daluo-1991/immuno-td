@@ -230,7 +230,6 @@
     <div id="leftbar">
       <button class="lbtn" id="pauseBtn" title="暂停/继续">⏸</button>
       <button class="lbtn" id="speedBtn" title="倍速 1×/2×">▶</button>
-      <button class="lbtn" id="autoBtn"  title="自动合成">🔄</button>
       <button class="lbtn" id="statBtn"  title="伤害统计">📊</button>
       <button class="lbtn" id="helpBtn"  title="帮助">❓</button>
     </div>
@@ -279,7 +278,7 @@
         <span class="h">⤴ 合成升阶</span>同型同级两张可合成：拖一张到另一张上，或点底部「⚡合成」。越大越猛、占位不变，满级 <b>Lv.3</b>。
         <span class="h">🧠 记忆观察者</span>杀怪攒经验，满格<b>战斗暂停</b>并弹三选一 buff，选一项本局永久强化。
         <span class="h">🛡️ 战役</span>通关一章解锁下一章，可回看 / 重打已解锁章节。
-        <span class="h">🎛️ 左上工具栏</span>⏸ 暂停 · ▶ 倍速 · 🔄 自动合成 · 📊 伤害统计（看哪张卡输出最高）· ❓ 帮助。
+        <span class="h">🎛️ 左上工具栏</span>⏸ 暂停 · ▶ 倍速 · 📊 伤害统计（看哪张卡输出最高）· ❓ 帮助。
       </div>
       <button class="btn big" id="helpClose">知道了</button>
     </div>
@@ -630,7 +629,6 @@ function newGame(idx){
     userPaused: false,                                 // 主动暂停（左上 ⏸ 按钮）
     obsPaused: false,                                  // 观察者弹层暂停（经验满时）
     paused: false,                                     // 综合暂停 = userPaused || obsPaused（由 syncPause 维护，兼容旧测试）
-    autoMerge: false,                                  // 自动合成开关（左上 🔄）
     showStats: false,                                  // 伤害统计开关（左上 📊）
     obsLevel: 1,                                       // 观察者等级（每次选 buff 后 +1）
     obsExp: 0,                                         // 当前累计经验（杀怪获得）
@@ -1704,12 +1702,6 @@ document.getElementById('pauseBtn').onclick=()=>{
   b.classList.toggle('warn', G.userPaused);
   b.title = G.userPaused ? '继续' : '暂停';
 };
-// 自动合成开关（🔄）：开启后每帧自动把可合成组合合成
-document.getElementById('autoBtn').onclick=()=>{
-  if(!G) return;
-  G.autoMerge = !G.autoMerge;
-  document.getElementById('autoBtn').classList.toggle('on', G.autoMerge);
-};
 // 伤害统计开关（📊）
 document.getElementById('statBtn').onclick=()=>{
   if(!G) return;
@@ -1780,10 +1772,6 @@ function loop(ts){
       G.running = false;
       alert('游戏逻辑报错(已暂停):\n'+e.message+'\n位置: step()');
     }
-  }
-  // 自动合成：开启时，每帧若有可合成组合即自动合成（仅战斗/准备/间隙阶段，暂停时不触发）
-  if(G.autoMerge && !G.paused && (G.phase==='wave'||G.phase==='gap'||G.phase==='prep')){
-    if(findMergeOpportunities().length>0) mergeAll();
   }
 }
 
