@@ -739,23 +739,27 @@ function render(){
     const type = isShop ? drag.type : drag.tower.type;
     const t = isShop ? null : drag.tower;
     const d=CELLS[type];
-    // 与真实落点一致：拖场上塔 / 拖商店卡到占用格 → 可顶掉(anchorForWithEvict)；
-    // 拖商店卡到空格 → 普通摆放(anchorFor，不顶掉)。
-    const hoverOcc = G.grid[drag.hoverR] && G.grid[drag.hoverR][drag.hoverC];
-    const useEvict = !isShop || (hoverOcc && typeof hoverOcc==='object');
+    // 商店卡：光标即2×2左上角，预览框始终跟光标走（不吸附到别的锚点）。
+    //   - 光标落在同尺寸塔上 → 显示⇄替换预览(黄)，锚点=该塔原位
+    //   - 否则 → canPlace(光标位) 判定：全绿=蓝(可放)，含暗格/越界=红(放不下)
+    // 场上塔拖动：保留 anchorForWithEvict（挪位需要吸附到最近合法位）
     let valid, isSwap=false, ax, ay;
     if(t) removeTowerFromGrid(t);
-    if(useEvict){
+    if(isShop){
+      const hoverVal = G.grid[drag.hoverR] && G.grid[drag.hoverR][drag.hoverC];
+      if(hoverVal && typeof hoverVal==='object' && hoverVal.size===d.size && hoverVal!==t){
+        isSwap = true; valid = true;
+        ax = hoverVal.col; ay = hoverVal.row;
+      } else {
+        valid = canPlace(type, drag.hoverC, drag.hoverR);
+        ax = drag.hoverC; ay = drag.hoverR;
+      }
+    } else {
       const ev = anchorForWithEvict(type, drag.hoverC, drag.hoverR, t);
       valid = !!ev;
       isSwap = !!ev && ev.targets.length>0;
       ax = ev ? ev.anchor.ac : drag.hoverC;
       ay = ev ? ev.anchor.ar : drag.hoverR;
-    } else {
-      const a = anchorFor(type, drag.hoverC, drag.hoverR);
-      valid = !!a;
-      ax = a ? a.ac : drag.hoverC;
-      ay = a ? a.ar : drag.hoverR;
     }
     if(t) restoreTowerToGrid(t);
     const gx=ax*CELL, gy=ay*CELL, gs=d.size*CELL;
@@ -1164,28 +1168,48 @@ function tryMoveOrSwap(t, c, r){
   renderShop(); updateHUD();
   return { ok:true, swapped: targets.length>0, msg:'' };
 }
-// 触发：任何时候都允许；边界：仅细胞卡 / 顶回塔保留类型（L1 无等级）
+// 商店卡落子（与拖动预览一致：光标即2×2左上角，不吸附到别的锚点）
+//   - 光标落在同尺寸塔上 → 替换（旧塔退回商店）
+//   - 否则 → canPlace(光标位) 判定：可放则落子，不可放则退商店
 function trySwap(slotIdx, newType, c, r){
-  // 统一 anchorForWithEvict：空格→摆放(targets=[])，覆盖塔→顶掉(targets=[塔])
-  const res = anchorForWithEvict(newType, c, r, null);
-  if(!res){
-    const issues = diagnosePlacement(newType, c, r);
-    const reason = issues.length ? issues.slice(0,4).join('；') : '目标位置无法摆放';
-    tip('放不下：'+reason);
+  const d = CELLS[newType];
+  const cellVal = G.grid[r] && G.grid[r][c];
+
+  // ① 光标落在同尺寸塔上 → 替换
+  if(cellVal && typeof cellVal==='object' && cellVal.size===d.size){
+    const target = cellVal;
+    removeTowerFromGrid(target);
+    let allClear = true;
+    for(let dr=0; dr<d.size; dr++){ for(let dc=0; dc<d.size; dc++){
+      if(G.grid[target.row+dr][target.col+dc]!==null){ allClear=false; break; }
+    } if(!allClear) break; }
+    if(allClear){
+      G.towers = G.towers.filter(t=>t!==target);
+      placeTower(newType, target.col, target.row);
+      G.shop.splice(slotIdx,1);
+      const slot = findFreeShopSlot();
+      if(slot>=0) G.shop[slot]=target.type; else G.shop.push(target.type);
+      G.selected=-1; renderShop(); updateHUD();
+      tip(`替换：${d.name} 上场，${CELLS[target.type].name} 退回商店`);
+      return;
+    }
+    restoreTowerToGrid(target);
+    tip('放不下：目标位置有其他塔阻挡');
     return;
   }
-  const { anchor:a, targets } = res;
-  for(const target of targets) removeTowerFromGrid(target);
-  G.towers = G.towers.filter(t=>!targets.includes(t));
-  placeTower(newType, a.ac, a.ar);
-  G.shop.splice(slotIdx,1);   // 消耗新卡（splice 紧凑，用一张少一张）
-  for(const target of targets){
-    const slot = findFreeShopSlot();
-    if(slot>=0) G.shop[slot]=target.type;
-    else G.shop.push(target.type);
+
+  // ② 光标即左上角：canPlace 判定
+  if(canPlace(newType, c, r)){
+    placeTower(newType, c, r);
+    G.shop.splice(slotIdx,1);
+    G.selected=-1; renderShop(); updateHUD();
+    return;
   }
-  G.selected=-1;
-  renderShop(); updateHUD();
+
+  // ③ 放不下 → 退商店（不消耗卡片）
+  const issues = diagnosePlacement(newType, c, r);
+  const reason = issues.length ? issues.slice(0,4).join('；') : '目标位置无法摆放';
+  tip('放不下：'+reason);
 }
 
 // ---------- 商店渲染（含格子卡形状预览）----------
