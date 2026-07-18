@@ -157,6 +157,56 @@
   #overlay p { font-size: 13px; color: #9fb2cc; line-height: 1.7; margin-bottom: 20px; max-width: 300px; }
   #overlay .big { font-size: 15px; padding: 12px 34px; flex: none; border-radius: 12px; }
   .em { color: #ffd24a; font-weight: 700; }
+
+  /* ===== 左上工具栏（仿保卫向日葵左侧竖排功能） ===== */
+  #stage { position: relative; align-self: center; margin-top: 2px; display: inline-block; }
+  #leftbar {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 34px; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    gap: 6px; padding: 4px 0;
+    background: linear-gradient(90deg, rgba(10,14,22,.85), rgba(10,14,22,0));
+  }
+  .lbtn {
+    width: 30px; height: 30px; border-radius: 9px; border: 1px solid #2c3c58;
+    background: #162031; color: #cdd9ec; font-size: 14px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; padding: 0;
+    transition: background .12s, border-color .12s, transform .08s;
+  }
+  .lbtn:active { transform: scale(.92); }
+  .lbtn.on  { background: #19c39e; color: #04221c; border-color: #19c39e; }
+  .lbtn.warn{ background: #ef4444; color: #fff;     border-color: #ef4444; }
+
+  /* ===== 伤害统计框 ===== */
+  #statBox {
+    position: absolute; left: 38px; bottom: 4px; width: 170px; z-index: 9; display: none;
+    background: rgba(8,12,20,.82); border: 1px solid #2c3c58; border-radius: 10px;
+    padding: 6px 8px; font-size: 11px; backdrop-filter: blur(3px);
+  }
+  #statBox .statT { font-weight: 800; color: #ffd24a; margin-bottom: 4px; font-size: 11px; }
+  #statBox .statT span { color: #7d8ca3; font-weight: 400; font-size: 9px; }
+  #statBox .statEmpty { color: #6f8199; font-size: 10px; }
+  #statBox .statRow { display: flex; align-items: center; gap: 5px; margin: 2px 0; }
+  #statBox .statRow.hot .sn { color: #ffd24a; font-weight: 800; }
+  #statBox .sn { flex: 0 0 46px; color: #c4d0e0; }
+  #statBox .sd { flex: 0 0 38px; text-align: right; color: #9fb2cc; font-variant-numeric: tabular-nums; }
+  #statBox .sbar { flex: 1; height: 5px; background: #0a1018; border-radius: 3px; overflow: hidden; }
+  #statBox .sbar i { display: block; height: 100%; background: linear-gradient(90deg,#19c39e,#ffd24a); }
+
+  /* ===== 帮助 / 玩法说明弹层 ===== */
+  #helpOverlay {
+    position: absolute; inset: 0; z-index: 31; display: flex;
+    flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(5,7,13,.9); backdrop-filter: blur(5px); padding: 20px;
+  }
+  #helpOverlay.hide { display: none; }
+  .helpCard {
+    width: 100%; max-width: 340px; max-height: 82vh; overflow-y: auto;
+    background: linear-gradient(160deg,#16203a,#0e1626); border: 1.5px solid #2c3c58;
+    border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .helpBody { font-size: 12.5px; line-height: 1.75; color: #c4d0e0; }
+  .helpBody b { color: #ffd24a; }
+  .helpBody .h { color: #6cc8ff; font-weight: 800; display: block; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -176,6 +226,16 @@
   <div id="stage">
     <canvas id="cv"></canvas>
     <div id="fever"></div>
+    <!-- 左上竖排工具栏（仿保卫向日葵）-->
+    <div id="leftbar">
+      <button class="lbtn" id="pauseBtn" title="暂停/继续">⏸</button>
+      <button class="lbtn" id="speedBtn" title="倍速 1×/2×">▶</button>
+      <button class="lbtn" id="autoBtn"  title="自动合成">🔄</button>
+      <button class="lbtn" id="statBtn"  title="伤害统计">📊</button>
+      <button class="lbtn" id="helpBtn"  title="帮助">❓</button>
+    </div>
+    <!-- 伤害统计框（📊 开启时显示）-->
+    <div id="statBox"></div>
   </div>
 
   <!-- 记忆观察者（成长辅线）：不占棋盘，杀怪攒经验，满格三选一 -->
@@ -189,7 +249,6 @@
     <div id="shopRow"></div>
     <div id="shopCtrl">
       <button class="btn ghost" id="rerollBtn">🔄 刷新 <span style="color:#ffd24a">⚡15</span></button>
-      <button class="btn speed" id="speedBtn">▶ 1×</button>
       <button class="btn merge" id="mergeBtn">⚡ 合成</button>
       <button class="btn" id="startBattleBtn">⚔ 开始战斗</button>
     </div>
@@ -208,6 +267,22 @@
     <div class="buffTitle">🧠 记忆觉醒 · <span id="buffLv">Lv.1</span></div>
     <div class="buffSub">观察者积累了足够记忆——选择一项永久强化（本局有效）</div>
     <div id="buffCards"></div>
+  </div>
+
+  <!-- 帮助 / 玩法说明 -->
+  <div id="helpOverlay" class="hide">
+    <div class="helpCard">
+      <div class="buffTitle">❓ 玩法说明</div>
+      <div class="helpBody">
+        <span class="h">🎯 目标</span>病毒从<b>左侧入口</b>沿外圈行进，从<b>右上角出口</b>逃逸。漏怪升高体温，到 <b>42° 发烧失败</b>。
+        <span class="h">🦠 摆细胞（免费）</span>开局仅中央 <b>3×3 绿格</b>可摆。点细胞卡→点绿格，或直接拖到棋盘。商店首槽的<b>格子卡</b>点暗格可开通更多摆位区。
+        <span class="h">⤴ 合成升阶</span>同型同级两张可合成：拖一张到另一张上，或点底部「⚡合成」。越大越猛、占位不变，满级 <b>Lv.3</b>。
+        <span class="h">🧠 记忆观察者</span>杀怪攒经验，满格<b>战斗暂停</b>并弹三选一 buff，选一项本局永久强化。
+        <span class="h">🛡️ 战役</span>通关一章解锁下一章，可回看 / 重打已解锁章节。
+        <span class="h">🎛️ 左上工具栏</span>⏸ 暂停 · ▶ 倍速 · 🔄 自动合成 · 📊 伤害统计（看哪张卡输出最高）· ❓ 帮助。
+      </div>
+      <button class="btn big" id="helpClose">知道了</button>
+    </div>
   </div>
 </div>
 
@@ -271,8 +346,8 @@ function gainObsExp(n){
   maybeTriggerObserver();
 }
 function maybeTriggerObserver(){
-  if(!G || G.paused) return;                    // 已在弹层中不重复触发
-  if(G.obsExp >= G.obsExpMax){ G.paused = true; showBuffPanel(); }
+  if(!G || G.userPaused || G.obsPaused) return;  // 已暂停（主动或弹层）时不重复触发
+  if(G.obsExp >= G.obsExpMax){ G.obsPaused = true; syncPause(); showBuffPanel(); }
 }
 // 随机取 3 张 buff 三选一（避免同一次出现重复 id）
 function rollBuffChoices(){
@@ -315,7 +390,7 @@ function pickBuff(i){
   } else {
     const ov = document.getElementById('buffOverlay');
     if(ov) ov.classList.add('hide');
-    G.paused = false;
+    G.obsPaused = false; syncPause();
   }
 }
 function updateObsHUD(){
@@ -524,6 +599,8 @@ document.getElementById('fever').style.height = cv.height+'px';
 // ---------- 游戏状态 ----------
 let G = null;
 function keyOf(c,r){ return c+','+r; }
+// 综合暂停 = 主动暂停 || 观察者弹层暂停。保持 G.paused 为真实属性，兼容既有测试。
+function syncPause(){ if(G) G.paused = !!(G.userPaused || G.obsPaused); }
 
 function newGame(idx){
   idx = (idx|0);
@@ -550,7 +627,11 @@ function newGame(idx){
     speed: 1, running: false,
     projectiles: [], floaters: [],
     // ---------- §7.2 记忆观察者（成长辅线，每章重置）----------
-    paused: false,                                     // 战斗暂停（buff 三选一弹层期间为 true）
+    userPaused: false,                                 // 主动暂停（左上 ⏸ 按钮）
+    obsPaused: false,                                  // 观察者弹层暂停（经验满时）
+    paused: false,                                     // 综合暂停 = userPaused || obsPaused（由 syncPause 维护，兼容旧测试）
+    autoMerge: false,                                  // 自动合成开关（左上 🔄）
+    showStats: false,                                  // 伤害统计开关（左上 📊）
     obsLevel: 1,                                       // 观察者等级（每次选 buff 后 +1）
     obsExp: 0,                                         // 当前累计经验（杀怪获得）
     obsExpMax: obsExpFor(1),                           // 本级触发所需经验
@@ -954,7 +1035,9 @@ function step(dt){
 
 function dealDamage(v, base, t){
   const m = (MATRIX[v.type] && MATRIX[v.type][t.type]) || 1.0;
-  v.hp -= base * m * v.vuln * ((G&&G.buffs&&G.buffs.atk)||1);   // 记忆buff：火力强化
+  const dmg = base * m * v.vuln * ((G&&G.buffs&&G.buffs.atk)||1);   // 记忆buff：火力强化
+  v.hp -= dmg;
+  if(t) t.dmg = (t.dmg||0) + dmg;                                  // DPS 统计：累计该塔造成的伤害
 }
 function addFloater(x,y,txt,color){ G.floaters.push({x,y,txt,color,life:0.9}); }
 
@@ -1041,8 +1124,10 @@ function render(){
     }
   }
 
-  // 塔
-  for(const t of G.towers) drawTower(t);
+  // 塔（伤害统计：高亮输出最高的塔）
+  const maxDmg = G.showStats ? G.towers.reduce((m,t)=>Math.max(m, t.dmg||0),0) : 0;
+  for(const t of G.towers) drawTower(t, maxDmg);
+  updateStats();
   // 拖动预览
   if(drag && drag.moved && drag.hoverC!=null){
     const isShop = drag.kind==='shop';
@@ -1143,7 +1228,7 @@ function drawEndpoint(p,color,txt){
   ctx.fillStyle=color; ctx.font='bold 14px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText(txt,x+CELL/2,y+CELL/2);
 }
-function drawTower(t){
+function drawTower(t, maxDmg){
   const d=CELLS[t.type]; const px=t.col*CELL, py=t.row*CELL, sz=d.size*CELL;
   const cx=px+sz/2, cy=py+sz/2, r=sz*0.36;
   ctx.fillStyle=d.color+'66'; roundRect(px+3,py+3,sz-6,sz-6,8); ctx.fill();
@@ -1158,6 +1243,15 @@ function drawTower(t){
     ctx.fillStyle='rgba(0,0,0,.55)'; roundRect(bx,by,13,12,4); ctx.fill();
     ctx.fillStyle='#ffd24a'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('L'+k, bx+6.5, by+6);
+  }
+  // DPS 统计：开启时画伤害数字；输出最高者加金色光环
+  if(G && G.showStats){
+    const dmg = Math.round(t.dmg||0);
+    const hot = dmg>0 && dmg===maxDmg;
+    if(hot){ ctx.strokeStyle='#ffd24a'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(cx,cy,r+5,0,7); ctx.stroke(); }
+    ctx.fillStyle = hot ? '#ffd24a' : '#9fb2cc';
+    ctx.font='bold 10px monospace'; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+    ctx.fillText(dmg, cx, py-3);
   }
 }
 function drawVirus(v){
@@ -1598,9 +1692,33 @@ document.getElementById('rerollBtn').onclick=()=>{
   tip('卡池已刷新（格子卡+细胞卡一起重roll，没用掉的格子会丢失）');
 };
 document.getElementById('speedBtn').onclick=()=>{
-  G.speed = G.speed===1?2 : G.speed===2?4 : 1;
-  document.getElementById('speedBtn').textContent = '▶ '+G.speed+'×';
+  G.speed = G.speed===1?2:1;
+  document.getElementById('speedBtn').textContent = G.speed===2?'⏩':'▶';
 };
+// 主动暂停（⏸）：与观察者弹层暂停分离，互不干扰
+document.getElementById('pauseBtn').onclick=()=>{
+  if(!G) return;
+  G.userPaused = !G.userPaused; syncPause();
+  const b=document.getElementById('pauseBtn');
+  b.textContent = G.userPaused ? '▶' : '⏸';
+  b.classList.toggle('warn', G.userPaused);
+  b.title = G.userPaused ? '继续' : '暂停';
+};
+// 自动合成开关（🔄）：开启后每帧自动把可合成组合合成
+document.getElementById('autoBtn').onclick=()=>{
+  if(!G) return;
+  G.autoMerge = !G.autoMerge;
+  document.getElementById('autoBtn').classList.toggle('on', G.autoMerge);
+};
+// 伤害统计开关（📊）
+document.getElementById('statBtn').onclick=()=>{
+  if(!G) return;
+  G.showStats = !G.showStats;
+  document.getElementById('statBtn').classList.toggle('on', G.showStats);
+};
+// 帮助 / 玩法说明
+document.getElementById('helpBtn').onclick=()=>{ document.getElementById('helpOverlay').classList.remove('hide'); };
+document.getElementById('helpClose').onclick=()=>{ document.getElementById('helpOverlay').classList.add('hide'); };
 // 「合成」按钮：达条件时浮现，点击把当前所有可合成组合一次性合掉
 document.getElementById('mergeBtn').onclick=()=>{ mergeAll(); };
 // 每帧刷新按钮可见性 + 数量（达到条件立刻冒出）
@@ -1616,6 +1734,26 @@ function updateMergeButton(){
   } else if(btn.classList.contains('show')){
     btn.classList.remove('show');
   }
+}
+// 伤害统计框：📊 开启时列出各塔累计伤害排名，最高者高亮
+function updateStats(){
+  const box=document.getElementById('statBox');
+  if(!box || !G) return;
+  if(!G.showStats){ if(box.style.display!=='none') box.style.display='none'; return; }
+  box.style.display='block';
+  const arr=G.towers.map(t=>({ name:CELLS[t.type].name, tier:t.tier||1, dmg:Math.round(t.dmg||0) }))
+                     .sort((a,b)=>b.dmg-a.dmg);
+  if(arr.length===0){ box.innerHTML='<div class="statT">📊 伤害统计</div><div class="statEmpty">摆放细胞后开始统计</div>'; return; }
+  const max=arr[0].dmg;
+  let html='<div class="statT">📊 伤害统计 <span>(累计)</span></div>';
+  for(const a of arr.slice(0,6)){
+    const pct = max>0 ? Math.round(a.dmg/max*100) : 0;
+    html += '<div class="statRow'+(a.dmg===max&&max>0?' hot':'')+'">'
+          + '<span class="sn">'+a.name+(a.tier>=2?' L'+a.tier:'')+'</span>'
+          + '<span class="sd">'+a.dmg+'</span>'
+          + '<span class="sbar"><i style="width:'+pct+'%"></i></span></div>';
+  }
+  box.innerHTML=html;
 }
 
 // ---------- 主循环 ----------
@@ -1642,6 +1780,10 @@ function loop(ts){
       G.running = false;
       alert('游戏逻辑报错(已暂停):\n'+e.message+'\n位置: step()');
     }
+  }
+  // 自动合成：开启时，每帧若有可合成组合即自动合成（仅战斗/准备/间隙阶段，暂停时不触发）
+  if(G.autoMerge && !G.paused && (G.phase==='wave'||G.phase==='gap'||G.phase==='prep')){
+    if(findMergeOpportunities().length>0) mergeAll();
   }
 }
 
