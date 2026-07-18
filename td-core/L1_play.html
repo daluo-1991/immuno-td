@@ -311,17 +311,29 @@ function canPlace(type,col,row){
 }
 
 // 把点击格(c,r)解析为 size×size 塔的合法「左上角锚点」。
-// 在“能让点击格落在 footprint 内”的所有候选锚点中，优先让 footprint 中心
-// 落在点击格附近；同分则偏向右下角（ac+ar 更大），使点击偏右下时塔也落在右下，
-// 避免 2×2 替换/摆放时新塔总是跳到左上角。
+// 语义：
+//  - 1×1：精确落点，点击格本身必须可放（暗格/占用→null，由调用方回退商店/原位）。绝不吸到邻居。
+//  - 2×2：先试“点击格落在 footprint 内”的精确 4 候选（瞄哪能落哪）；
+//         若都失败（如附近含暗格/被占），再在“以理想锚点为中心 ±size 锚点”的宽窗口里
+//         吸附到最近的合法 2×2 位（点击格可不在 footprint 内）。宽窗口也失败→返回 null（回退）。
+//   这样 2×2 在半满棋盘绝大多数位置都能拖动/放置，又不会像 1×1 那样吸到邻格乱跑。
 function anchorFor(type, c, r){
-  // 1×1 也必须经过 canPlace 校验：锁定暗格 / 被占用格不可落，不能无条件返回点击格。
-  // 调用方在“移动自身塔”时应先临时移出该塔再调用，使其自身占格被视为空。
+  const exact = anchorForCore(type, c, r, false);
+  if(exact || CELLS[type].size===1) return exact;
+  return anchorForCore(type, c, r, true);
+}
+function anchorForCore(type, c, r, wide){
   const s = CELLS[type].size;
   const tAc = c - (s-1)/2, tAr = r - (s-1)/2;
+  const aMin=1, aMax=LEVEL.cols-s-1, bMin=1, bMax=LEVEL.rows-s-1;
+  if(aMax<aMin || bMax<bMin) return null;
+  const R = s; // 宽搜索半径（锚点空间）：2×2 → ±2 锚点
+  const acLo = wide ? Math.max(aMin, Math.floor(tAc)-R) : Math.max(aMin, c-(s-1));
+  const acHi = wide ? Math.min(aMax, Math.ceil(tAc)+R)  : Math.min(aMax, c);
+  const arLo = wide ? Math.max(bMin, Math.floor(tAr)-R) : Math.max(bMin, r-(s-1));
+  const arHi = wide ? Math.min(bMax, Math.ceil(tAr)+R)  : Math.min(bMax, r);
   let best=null, bestScore=1e9, bestSum=-1e9;
-  for(let dr=0; dr<s; dr++) for(let dc=0; dc<s; dc++){
-    const ac=c-dc, ar=r-dr;
+  for(let ar=arLo; ar<=arHi; ar++) for(let ac=acLo; ac<=acHi; ac++){
     if(!canPlace(type, ac, ar)) continue;
     const score = Math.abs(ac - tAc) + Math.abs(ar - tAr);
     const sum = ac + ar;
@@ -334,12 +346,24 @@ function anchorFor(type, c, r){
 
 // 对「移动/交换」场景：把点击格(c,r)解析为合法左上角锚点，并允许临时顶掉该 footprint 内其他塔。
 // 返回 { anchor:{ac,ar}, targets:Tower[] }，找不到返回 null。targets 为需要被顶掉的场上塔（已去重）。
+// 语义同 anchorFor：1×1 精确；2×2 先精确 4 候选，失败再宽窗口吸附最近的合法（可顶掉）2×2 位。
 function anchorForWithEvict(type, c, r, exclude){
+  const exact = anchorForWithEvictCore(type, c, r, exclude, false);
+  if(exact || CELLS[type].size===1) return exact;
+  return anchorForWithEvictCore(type, c, r, exclude, true);
+}
+function anchorForWithEvictCore(type, c, r, exclude, wide){
   const s = CELLS[type].size;
   const tAc = c - (s-1)/2, tAr = r - (s-1)/2;
+  const aMin=1, aMax=LEVEL.cols-s-1, bMin=1, bMax=LEVEL.rows-s-1;
+  if(aMax<aMin || bMax<bMin) return null;
+  const R = s;
+  const acLo = wide ? Math.max(aMin, Math.floor(tAc)-R) : Math.max(aMin, c-(s-1));
+  const acHi = wide ? Math.min(aMax, Math.ceil(tAc)+R)  : Math.min(aMax, c);
+  const arLo = wide ? Math.max(bMin, Math.floor(tAr)-R) : Math.max(bMin, r-(s-1));
+  const arHi = wide ? Math.min(bMax, Math.ceil(tAr)+R)  : Math.min(bMax, r);
   let best=null, bestScore=1e9, bestSum=-1e9, bestTargets=[];
-  for(let dr=0; dr<s; dr++) for(let dc=0; dc<s; dc++){
-    const ac=c-dc, ar=r-dr;
+  for(let ar=arLo; ar<=arHi; ar++) for(let ac=acLo; ac<=acHi; ac++){
     if(!grid_in(ac, ar) || !grid_in(ac+s-1, ar+s-1)) continue;
     let inside=true;
     for(let ddr=0; ddr<s; ddr++) for(let ddc=0; ddc<s; ddc++){
