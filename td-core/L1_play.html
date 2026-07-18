@@ -298,14 +298,19 @@ function grid_in(c,r){ return c>=0&&c<LEVEL.cols&&r>=0&&r<LEVEL.rows; }
 
 // ---------- 合法性判定 ----------
 
-// 细胞摆放：size×size 全在内格摆位区且为已开通空格(null)
-function canPlace(type,col,row){
+// 细胞摆放：size×size 全在内格摆位区且为「可放格」。
+// openLocked=true 时，暗格('locked')视为可放（落塔时自动开通，契合「免费摆塔」），
+// 这样玩家能把塔摆到任意内格位置，不再被锁定暗格卡死。
+function canPlace(type,col,row, openLocked){
   const d = CELLS[type];
   for(let dr=0;dr<d.size;dr++)for(let dc=0;dc<d.size;dc++){
     const c=col+dc, r=row+dr;
     if(!grid_in(c,r)) return false;
     if(c<1||c>LEVEL.cols-2||r<1||r>LEVEL.rows-2) return false;
-    if(G.grid[r][c]!==null) return false;
+    const g = G.grid[r][c];
+    if(g===null) continue;
+    if(openLocked && g==='locked') continue;   // 落塔时暗格自动开通
+    return false;
   }
   return true;
 }
@@ -317,12 +322,12 @@ function canPlace(type,col,row){
 //         若都失败（如附近含暗格/被占），再在“以理想锚点为中心 ±size 锚点”的宽窗口里
 //         吸附到最近的合法 2×2 位（点击格可不在 footprint 内）。宽窗口也失败→返回 null（回退）。
 //   这样 2×2 在半满棋盘绝大多数位置都能拖动/放置，又不会像 1×1 那样吸到邻格乱跑。
-function anchorFor(type, c, r){
-  const exact = anchorForCore(type, c, r, false);
+function anchorFor(type, c, r, openLocked){
+  const exact = anchorForCore(type, c, r, false, openLocked);
   if(exact || CELLS[type].size===1) return exact;
-  return anchorForCore(type, c, r, true);
+  return anchorForCore(type, c, r, true, openLocked);
 }
-function anchorForCore(type, c, r, wide){
+function anchorForCore(type, c, r, wide, openLocked){
   const s = CELLS[type].size;
   const tAc = c - (s-1)/2, tAr = r - (s-1)/2;
   const aMin=1, aMax=LEVEL.cols-s-1, bMin=1, bMax=LEVEL.rows-s-1;
@@ -334,7 +339,7 @@ function anchorForCore(type, c, r, wide){
   const arHi = wide ? Math.min(bMax, Math.ceil(tAr)+R)  : Math.min(bMax, r);
   let best=null, bestScore=1e9, bestSum=-1e9;
   for(let ar=arLo; ar<=arHi; ar++) for(let ac=acLo; ac<=acHi; ac++){
-    if(!canPlace(type, ac, ar)) continue;
+    if(!canPlace(type, ac, ar, openLocked)) continue;
     const score = Math.abs(ac - tAc) + Math.abs(ar - tAr);
     const sum = ac + ar;
     // 优先选择 footprint 覆盖鼠标点击格 (c,r) 的锚点；同分/同覆盖时偏向右下
@@ -352,12 +357,12 @@ function anchorForCore(type, c, r, wide){
 // 对「移动/交换」场景：把点击格(c,r)解析为合法左上角锚点，并允许临时顶掉该 footprint 内其他塔。
 // 返回 { anchor:{ac,ar}, targets:Tower[] }，找不到返回 null。targets 为需要被顶掉的场上塔（已去重）。
 // 语义同 anchorFor：1×1 精确；2×2 先精确 4 候选，失败再宽窗口吸附最近的合法（可顶掉）2×2 位。
-function anchorForWithEvict(type, c, r, exclude){
-  const exact = anchorForWithEvictCore(type, c, r, exclude, false);
+function anchorForWithEvict(type, c, r, exclude, openLocked){
+  const exact = anchorForWithEvictCore(type, c, r, exclude, false, openLocked);
   if(exact || CELLS[type].size===1) return exact;
-  return anchorForWithEvictCore(type, c, r, exclude, true);
+  return anchorForWithEvictCore(type, c, r, exclude, true, openLocked);
 }
-function anchorForWithEvictCore(type, c, r, exclude, wide){
+function anchorForWithEvictCore(type, c, r, exclude, wide, openLocked){
   const s = CELLS[type].size;
   const tAc = c - (s-1)/2, tAr = r - (s-1)/2;
   const aMin=1, aMax=LEVEL.cols-s-1, bMin=1, bMax=LEVEL.rows-s-1;
@@ -381,7 +386,7 @@ function anchorForWithEvictCore(type, c, r, exclude, wide){
     if(okRegion){
       removeTowerFromGrid(hoverTower);
       let allNull=true;
-      for(let ddr=0; ddr<s; ddr++)for(let ddc=0; ddc<s; ddc++){ if(G.grid[aar+ddr][aac+ddc]!==null){ allNull=false; break; } }
+      for(let ddr=0; ddr<s; ddr++)for(let ddc=0; ddc<s; ddc++){ const g=G.grid[aar+ddr][aac+ddc]; if(g!==null && !(openLocked && g==='locked')){ allNull=false; break; } }
       restoreTowerToGrid(hoverTower);
       if(allNull) return { anchor:{ac:aac, ar:aar}, targets:[hoverTower] };
     }
@@ -399,7 +404,8 @@ function anchorForWithEvictCore(type, c, r, exclude, wide){
     for(const target of targets) removeTowerFromGrid(target);
     let ok=true;
     for(let ddr=0; ddr<s; ddr++) for(let ddc=0; ddc<s; ddc++){
-      if(G.grid[ar+ddr][ac+ddc] !== null){ ok=false; break; }
+      const g=G.grid[ar+ddr][ac+ddc];
+      if(g!==null && !(openLocked && g==='locked')){ ok=false; break; }
     }
     for(const target of targets) restoreTowerToGrid(target);
     if(!ok) continue;
@@ -748,13 +754,13 @@ function render(){
     let valid, isSwap=false, ax, ay;
     if(t) removeTowerFromGrid(t);
     if(useEvict){
-      const ev = anchorForWithEvict(type, drag.hoverC, drag.hoverR, t);
+      const ev = anchorForWithEvict(type, drag.hoverC, drag.hoverR, t, true);
       valid = !!ev;
       isSwap = !!ev && ev.targets.length>0;
       ax = ev ? ev.anchor.ac : drag.hoverC;
       ay = ev ? ev.anchor.ar : drag.hoverR;
     } else {
-      const a = anchorFor(type, drag.hoverC, drag.hoverR);
+      const a = anchorFor(type, drag.hoverC, drag.hoverR, true);
       valid = !!a;
       ax = a ? a.ac : drag.hoverC;
       ay = a ? a.ar : drag.hoverR;
@@ -1099,7 +1105,7 @@ function collectTowersInFootprint(type, c, r, exclude){
 // 移动已有塔；若拖到另一座塔 footprint 上，则直接顶掉并退回商店空槽（§8.2 的场上延伸）
 function tryMoveOrSwap(t, c, r){
   removeTowerFromGrid(t);
-  const res = anchorForWithEvict(t.type, c, r, t);
+  const res = anchorForWithEvict(t.type, c, r, t, true);
   if(!res){
     restoreTowerToGrid(t);
     const reason = moveFailReason(t, c, r);
@@ -1168,8 +1174,8 @@ function tryMoveOrSwap(t, c, r){
 }
 // 触发：任何时候都允许；边界：仅细胞卡 / 顶回塔保留类型（L1 无等级）
 function trySwap(slotIdx, newType, c, r){
-  // 统一 anchorForWithEvict：空格→摆放(targets=[])，覆盖塔→顶掉(targets=[塔])
-  const res = anchorForWithEvict(newType, c, r, null);
+  // 统一 anchorForWithEvict(openLocked=true)：空格/暗格→摆放(暗格自动开通)，覆盖塔→顶掉(targets=[塔])
+  const res = anchorForWithEvict(newType, c, r, null, true);
   if(!res){
     const issues = diagnosePlacement(newType, c, r);
     const reason = issues.length ? issues.slice(0,4).join('；') : '目标位置无法摆放';
