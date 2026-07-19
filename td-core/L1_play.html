@@ -407,15 +407,33 @@
    ============================================================ */
 
 // ---------- 细胞配置 ----------
+// 全部 19 种（设计目标 §6，全部可合 ✅）。elem = 元素变体(炎性/抑制/凋亡)，留空=无。
+// 角色(role) 当前引擎实装：basic/aoe(溅射+减速)/sniper/debuff(易伤)/fast/aura(光环增伤)/economic/intel(观察者)。
+// 其余角色(wall/shield/execute/storm/mark) 暂按「基础攻击」优雅降级，专属机制待 D 任务实现。
 const CELLS = {
-  neutrophil: { name:'中性粒', short:'中', role:'basic',    cost:20, dps:12, range:3.0, atkSpeed:1.2, size:1, color:'#3b82f6' },
-  macrophage: { name:'巨噬',   short:'噬', role:'aoe',      cost:30, dps:9,  range:3.0, atkSpeed:1.0, size:2, color:'#a855f7', aoe:1.5, slow:0.3 },
-  tcell:      { name:'T细胞',  short:'T', role:'sniper',    cost:35, dps:30, range:5.0, atkSpeed:0.5, size:1, color:'#ef4444' },
-  antibody:   { name:'抗体',   short:'抗', role:'debuff',   cost:30, dps:6,  range:4.0, atkSpeed:1.0, size:1, color:'#f59e0b', debuff:1.5 },
-  nk:         { name:'NK',    short:'NK', role:'fast',      cost:28, dps:18, range:3.0, atkSpeed:2.0, size:1, color:'#22c55e' },
-  interferon: { name:'干扰素', short:'扰', role:'aura',     cost:40, dps:7,  range:4.0, atkSpeed:1.0, size:2, color:'#06b6d4', aura:1.3 },
-  memory:     { name:'记忆',   short:'记', role:'intel',    cost:45, dps:0,  range:0,   atkSpeed:1.0, size:2, color:'#8b5cf6' },
-  redcell:    { name:'红细胞', short:'红', role:'economic', cost:10, dps:0,  range:0,   energyRate:2, size:1, color:'#dc2626' },
+  // ── 经济 ──
+  redcell:    { name:'红细胞', short:'红', role:'economic', cost:10, dps:0,  range:0,   energyRate:2, size:1, color:'#dc2626', elem:null },
+  // ── 单体输出 ──
+  neutrophil: { name:'中性粒', short:'中', role:'basic',    cost:20, dps:12, range:3.0, atkSpeed:1.2, size:1, color:'#3b82f6', elem:'炎性' },
+  tcell:      { name:'T细胞',  short:'T', role:'sniper',    cost:35, dps:30, range:5.0, atkSpeed:0.5, size:1, color:'#ef4444', elem:'凋亡' },
+  nk:         { name:'NK',    short:'NK', role:'fast',      cost:28, dps:18, range:3.0, atkSpeed:2.0, size:1, color:'#22c55e', elem:'炎性' },
+  plasma:     { name:'浆细胞', short:'浆', role:'basic',    cost:32, dps:10, range:4.5, atkSpeed:1.5, size:1, color:'#14b8a6', elem:'抑制' }, // 远程抗体弹幕·对空(机制待)
+  // ── 范围 / 控制 / 标记 ──
+  macrophage: { name:'巨噬',   short:'噬', role:'aoe',      cost:30, dps:9,  range:3.0, atkSpeed:1.0, size:2, color:'#8b5cf6', aoe:1.5, slow:0.3, elem:'抑制' },
+  eosinophil: { name:'嗜酸性粒', short:'嗜', role:'aoe',    cost:34, dps:11, range:3.0, atkSpeed:1.0, size:2, color:'#d946ef', aoe:1.4, elem:'凋亡' }, // 毒素·克大怪
+  complement: { name:'补体',   short:'补', role:'aoe',      cost:33, dps:8,  range:3.5, atkSpeed:1.2, size:1, color:'#f97316', aoe:1.6, elem:'炎性' }, // 爆裂MAC
+  mastcell:   { name:'肥大细胞', short:'肥', role:'debuff',  cost:26, dps:5,  range:3.5, atkSpeed:1.0, size:1, color:'#fb7185', debuff:1.3, elem:'抑制' }, // 组胺致炎减速
+  dendritic:  { name:'树突状', short:'树', role:'debuff',    cost:30, dps:5,  range:4.0, atkSpeed:1.0, size:1, color:'#facc15', debuff:1.4, elem:'炎性' }, // 标记易伤光环
+  // ── 减益 / 墙 / 护盾 / 爆发 / 光环 / 观察者 ──
+  antibody:   { name:'抗体',   short:'抗', role:'debuff',   cost:30, dps:6,  range:4.0, atkSpeed:1.0, size:1, color:'#f59e0b', debuff:1.5, elem:'抑制' },
+  cytostorm:  { name:'细胞因子风暴', short:'风', role:'storm', cost:38, dps:4,  range:4.0, atkSpeed:0.8, size:2, color:'#ec4899', elem:'炎性' }, // 群体增伤·有反噬(机制待)
+  platelet:   { name:'血小板', short:'小', role:'wall',     cost:15, dps:0,  range:0,   atkSpeed:1.0, size:1, color:'#b91c1c', elem:null }, // 凝血封路(机制待)
+  treg:       { name:'调节T',  short:'Treg', role:'aura',   cost:36, dps:6,  range:4.0, atkSpeed:1.0, size:2, color:'#0ea5e9', aura:1.2, elem:null }, // 减伤护盾光环
+  perforin:   { name:'穿孔素', short:'穿', role:'execute',  cost:40, dps:14, range:3.0, atkSpeed:1.0, size:1, color:'#7c3aed', elem:'凋亡' }, // 单体秒杀(机制待)
+  apoptosis:  { name:'凋亡诱导', short:'亡', role:'aoe',    cost:36, dps:7,  range:3.0, atkSpeed:1.0, size:2, color:'#9333ea', aoe:1.3, elem:'凋亡' }, // 范围清残血
+  interferon: { name:'干扰素', short:'扰', role:'aura',     cost:40, dps:7,  range:4.0, atkSpeed:1.0, size:2, color:'#06b6d4', aura:1.3, elem:'抑制' },
+  thcell:     { name:'辅助T',  short:'Th', role:'aura',     cost:34, dps:6,  range:4.0, atkSpeed:1.0, size:1, color:'#16a34a', aura:1.25, elem:'炎性' }, // 光环增攻速
+  memory:     { name:'记忆',   short:'记', role:'intel',    cost:45, dps:0,  range:0,   atkSpeed:1.0, size:2, color:'#a78bfa', elem:null }, // 观察者(§7.2 未实现)
 };
 
 // ---------- §7 合成主线：同型同级 2合1 → tier+1 ----------
@@ -614,16 +632,32 @@ function mergeAll(){
   updateMergeButton();
   return did;
 }
-const SHOP_POOL = ['neutrophil','macrophage','tcell','antibody','nk','interferon','memory','redcell'];
-const WEIGHTS   = { neutrophil:11.86,macrophage:11.86,tcell:11.86,antibody:11.86,nk:11.86,interferon:11.86,memory:11.86,redcell:17 };
+const SHOP_POOL = ['neutrophil','macrophage','tcell','antibody','nk','interferon','memory','redcell','plasma','eosinophil','complement','mastcell','dendritic','cytostorm','platelet','treg','perforin','apoptosis','thcell'];
+const WEIGHTS   = { neutrophil:11.86,macrophage:11.86,tcell:11.86,antibody:11.86,nk:11.86,interferon:11.86,memory:11.86,redcell:17,
+  plasma:11, eosinophil:10, complement:10, mastcell:10, dendritic:10, cytostorm:9, platelet:9, treg:9, perforin:9, apoptosis:9, thcell:10 };
 
 const MATRIX = {
   rhinovirus:{ neutrophil:1.0, macrophage:1.0, tcell:0.8, antibody:1.6, nk:1.0, interferon:1.0, memory:1.0 },
 };
+// 全部 13 种（设计目标 §5.4）。weak=弱点元素(命中增伤) / immune=免疫元素(命中减伤) —
+// 当前引擎仅 boss 标记生效，元素克系统待 D 任务接入；其余行为标记(armor/flying/split/...)为单一事实来源预留。
 const VIRUSES = {
-  rhinovirus:{ name:'感冒病毒', hp:50,  speed:0.5,  color:'#a3e635' },
+  // ── 基础行为 ──
+  rhinovirus:{ name:'感冒病毒', hp:50,  speed:0.5,  color:'#a3e635', weak:'炎性',  immune:null },
+  fast:      { name:'快速病毒', hp:35,  speed:1.1,  color:'#fde047', weak:'抑制',  immune:null },
+  armored:   { name:'装甲病毒', hp:120, speed:0.35, color:'#9ca3af', weak:'凋亡',  immune:null, armor:0.4 },
+  flying:    { name:'飞行病毒', hp:45,  speed:0.6,  color:'#67e8f9', weak:'炎性',  immune:null, flying:true },
+  splitter:  { name:'分裂病毒', hp:60,  speed:0.5,  color:'#fca5a5', weak:'凋亡',  immune:null, split:true },
+  stealth:   { name:'潜伏病毒', hp:55,  speed:0.5,  color:'#c4b5fd', weak:'抑制',  immune:null, stealth:true },
+  // ── 特殊行为 ──
+  burrow:    { name:'钻地病毒', hp:80,  speed:0.45, color:'#a16207', weak:'炎性',  immune:null, burrow:true },
+  swarm:     { name:'集群病毒', hp:28,  speed:0.7,  color:'#fb923c', weak:'凋亡',  immune:null, swarm:true },
+  resistant: { name:'抗药病毒', hp:90,  speed:0.4,  color:'#34d399', weak:null,    immune:'炎性' },
+  giant:     { name:'巨型病毒', hp:200, speed:0.25, color:'#1e293b', weak:'凋亡',  immune:null, giant:true },
+  // ── BOSS ──
   boss1:{      name:'变异体',   hp:450, speed:0.32, color:'#c084fc', boss:true },
   boss2:{      name:'超级病毒', hp:900, speed:0.28, color:'#ef4444', boss:true },
+  queen:{      name:'病毒女王', hp:2000,speed:0.22, color:'#f0abfc', boss:true, queen:true }, // 大BOSS章(§5.2 未实现)
 };
 
 // ---------- 格子卡形状定义 ----------
