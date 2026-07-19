@@ -120,7 +120,6 @@
     100% { box-shadow: 0 0 0 0 rgba(25,195,158,0); }
   }
 
-  #tip { font-size: 22px; color: #6f8199; text-align: center; padding: 8px 24px 20px; min-height: 52px; line-height: 1.5; }
 
   /* ===== 记忆观察者 HUD 条 ===== */
   #obsBar { padding: 12px 24px 4px; }
@@ -316,7 +315,6 @@
       <button class="btn" id="startBattleBtn">⚔ 开始战斗</button>
     </div>
   </div>
-  <div id="tip">放置<b>完全免费</b>。开局仅中央<b>3×3 绿格</b>可摆细胞；首槽刷出的<b>格子卡</b>（1/2/3格形状）整块点入深色<b>暗格</b>可<b>开通</b>更多摆位区。细胞卡拖到绿格落塔，拖到已有细胞上可<b>交换/顶掉</b>。同型同级两张可<b>合成升阶</b>——满足条件时底部浮现「⚡合成」按钮，点一下全部合成。能量<b>每波结束</b>由红细胞结算，点🔄刷新⚡15 重roll卡池。</div>
 
   <!-- 开始/结算遮罩 -->
   <div id="overlay" class="hide">
@@ -1483,7 +1481,7 @@ function selectSlot(i){
     tip('');
   }
 }
-function tip(s){ document.getElementById('tip').textContent = s || '点细胞卡→点绿格摆放；拖「同型同级」细胞到另一座上可⤴合成升阶（变大变强、占位不变）。（开局仅中央 3×3 绿格）'; }
+function tip(s){ /* 底部提示文字已移除，保留空函数避免调用处报错 */ }
 
 // ---------- 交互 ----------
 let hoverCell=null, showRangeTower=null, drag=null;
