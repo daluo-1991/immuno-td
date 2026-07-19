@@ -234,6 +234,17 @@
     transition: opacity .2s;
   }
   #homeOverlay.hide { display: none; }
+  #homeStamina {
+    position: absolute; top: 24px; right: 32px; z-index: 55;
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(17,22,38,.78); border: 2px solid rgba(255,95,162,.55);
+    border-radius: 26px; padding: 8px 18px;
+    backdrop-filter: blur(6px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 3px 10px rgba(0,0,0,.3);
+  }
+  #homeStamina .hsLabel { font-size: 20px; color: #ff9bc6; font-weight: 700; letter-spacing: 1px; }
+  #homeStamina .hsVal { font-size: 26px; color: #fff; font-weight: 800; }
+  #homeStamina .hsCd { font-size: 16px; color: #a9b3cc; }
   .homeCards {
     flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 32px; width: 100%; max-width: 700px;
@@ -331,6 +342,11 @@
 
   <!-- 战斗页（HOME）：默认入口，两个模式卡片 + 底部导航 -->
   <div id="homeOverlay">
+    <div id="homeStamina">
+      <span class="hsLabel">体力</span>
+      <span class="hsVal" id="homeStaminaVal">40/40</span>
+      <span class="hsCd" id="homeStaminaCd">已满</span>
+    </div>
     <div class="homeCards">
       <div class="modeCard" id="campaignCard" title="系统战役">
         <img src="assets/campaign-card.png" alt="系统战役">
@@ -1983,16 +1999,18 @@ function spendStamina(n){
   return true;
 }
 function updateStaminaHUD(){
-  const el=document.getElementById('staminaVal'); if(!el) return;
-  el.textContent = stamina.stamina + '/' + STAMINA_MAX;
-  const cd=document.getElementById('staminaCd');
-  if(cd){
-    if(stamina.stamina >= STAMINA_MAX){ cd.textContent='已满'; }
-    else {
-      const remain = STAMINA_REGEN_MS - (Date.now() - stamina.lastTs);
-      cd.textContent = Math.max(1, Math.ceil(remain/60000)) + 'm 后 +1';
-    }
-  }
+  const cdText = (function(){
+    if(stamina.stamina >= STAMINA_MAX) return '已满';
+    const remain = STAMINA_REGEN_MS - (Date.now() - stamina.lastTs);
+    return Math.max(1, Math.ceil(remain/60000)) + 'm 后 +1';
+  })();
+  const valText = stamina.stamina + '/' + STAMINA_MAX;
+  // 关卡战斗页 HUD
+  const el=document.getElementById('staminaVal'); if(el) el.textContent = valText;
+  const cd=document.getElementById('staminaCd'); if(cd) cd.textContent = cdText;
+  // 首页顶部
+  const hVal=document.getElementById('homeStaminaVal'); if(hVal) hVal.textContent = valText;
+  const hCd=document.getElementById('homeStaminaCd'); if(hCd) hCd.textContent = cdText;
 }
 
 // ---------- 系统战役页面（选关地图）----------
@@ -2036,6 +2054,7 @@ function showBattleHome(){
   if(home) home.classList.remove('hide');
   const tabs = (document.querySelectorAll ? document.querySelectorAll('.homeNav .navTab') : []);
   tabs.forEach(t=>{ t.classList.toggle('active', t.dataset.tab==='battle'); });
+  updateStaminaHUD();
 }
 function bindHomeEvents(){
   const campaignCard=document.getElementById('campaignCard');

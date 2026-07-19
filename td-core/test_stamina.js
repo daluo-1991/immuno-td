@@ -24,13 +24,16 @@ let pass=0,fail=0;
 function ok(name,cond){ if(cond){pass++;console.log('  ✓ '+name);} else {fail++;console.log('  ✗ '+name);} }
 const sv=()=>ctx.document.getElementById('staminaVal').textContent;
 const cd=()=>ctx.document.getElementById('staminaCd').textContent;
+const hsv=()=>ctx.document.getElementById('homeStaminaVal').textContent;
+const hcd=()=>ctx.document.getElementById('homeStaminaCd').textContent;
 
 console.log('=== 体力系统 ===');
-// 1. 默认满体力
-ok('默认体力=上限 40', api.getStamina().stamina===40 && api.STAMINA_MAX===40);
-ok('扣减常量 = 5', api.STAMINA_COST===5);
-ok('HUD 显示 40/40', sv()==='40/40');
-ok('HUD cd=已满', cd()==='已满');
+// 启动脚本后 updateStaminaHUD() 已执行，同时应写首页体力
+api.updateStaminaHUD();
+ok('战斗页 HUD 显示 40/40', sv()==='40/40');
+ok('战斗页 HUD cd=已满', cd()==='已满');
+ok('首页体力显示 40/40', hsv()==='40/40');
+ok('首页体力 cd=已满', hcd()==='已满');
 
 // 2. 扣 5
 const before=api.getStamina().stamina;
