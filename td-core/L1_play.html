@@ -221,6 +221,70 @@
   .helpBody { font-size: 12.5px; line-height: 1.75; color: #c4d0e0; }
   .helpBody b { color: #ffd24a; }
   .helpBody .h { color: #6cc8ff; font-weight: 800; display: block; margin-top: 8px; }
+
+  /* ===== 战斗页 HOME（默认入口：两个模式卡片 + 底部导航） ===== */
+  #homeOverlay {
+    position: absolute; inset: 0; z-index: 50;
+    display: flex; flex-direction: column; align-items: center;
+    background: url('assets/bg.png') center/cover;
+    padding: 16px 16px 0; overflow: hidden;
+    transition: opacity .2s;
+  }
+  #homeOverlay.hide { display: none; }
+  .homeTitle {
+    margin-top: 4px; font-size: 22px; font-weight: 900; color: #fff;
+    text-shadow: 0 2px 12px rgba(124,58,237,.7);
+    letter-spacing: 2px;
+  }
+  .homeCards {
+    flex: 1; display: flex; flex-direction: column; justify-content: center;
+    gap: 16px; width: 100%; max-width: 360px;
+  }
+  .modeCard {
+    position: relative; border-radius: 18px; overflow: hidden;
+    border: 3px solid #a78bfa; box-shadow: 0 10px 28px rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.1);
+    background: #1a1038; cursor: pointer;
+    transition: transform .12s, box-shadow .12s, border-color .12s;
+  }
+  .modeCard:active { transform: scale(.97); }
+  .modeCard:hover { border-color: #c4b5fd; box-shadow: 0 14px 34px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.15); }
+  .modeCard img { display: block; width: 100%; height: auto; object-fit: cover; }
+  .modeLabel {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    background: rgba(20, 12, 50, .78); border: 1.5px solid #8b5cf6;
+    border-radius: 22px; padding: 6px 20px; color: #fff;
+    font-size: 16px; font-weight: 900; letter-spacing: 2px;
+    backdrop-filter: blur(4px); box-shadow: 0 4px 14px rgba(0,0,0,.25);
+  }
+  .homeNav {
+    width: 100%; height: 96px; margin-top: auto;
+    background: url('assets/nav/bar.png') center bottom / 100% auto no-repeat;
+    display: flex; justify-content: space-around; align-items: flex-end;
+    padding: 0 10px 8px; position: relative;
+  }
+  .navTab {
+    width: 70px; height: 80px; position: relative; bottom: 2px;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    cursor: pointer; user-select: none;
+  }
+  .navTab .podium {
+    position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 68px; height: 68px;
+    background: url('assets/nav/podium.png') center bottom / contain no-repeat;
+    transition: background-image .15s;
+  }
+  .navTab.active .podium { background-image: url('assets/nav/podium-active.png'); }
+  .navTab .icon {
+    position: relative; z-index: 2; width: 44px; height: 44px; object-fit: contain;
+    margin-bottom: 2px; filter: grayscale(.25) opacity(.85);
+    transition: filter .15s, transform .1s;
+  }
+  .navTab.active .icon { filter: none; opacity: 1; transform: translateY(-2px); }
+  .navTab span {
+    position: relative; z-index: 3; font-size: 11px; color: #a89bc7; font-weight: 800;
+    margin-bottom: 4px; letter-spacing: .5px;
+  }
+  .navTab.active span { color: #fff; text-shadow: 0 0 6px rgba(124,58,237,.8); }
 </style>
 </head>
 <body>
@@ -269,10 +333,47 @@
   <div id="tip">放置<b>完全免费</b>。开局仅中央<b>3×3 绿格</b>可摆细胞；首槽刷出的<b>格子卡</b>（1/2/3格形状）整块点入深色<b>暗格</b>可<b>开通</b>更多摆位区。细胞卡拖到绿格落塔，拖到已有细胞上可<b>交换/顶掉</b>。同型同级两张可<b>合成升阶</b>——满足条件时底部浮现「⚡合成」按钮，点一下全部合成。能量<b>每波结束</b>由红细胞结算，点🔄刷新⚡15 重roll卡池。</div>
 
   <!-- 开始/结算遮罩 -->
-  <div id="overlay">
+  <div id="overlay" class="hide">
     <h1>🦠 免疫塔防 L1</h1>
     <p>病毒从<span class="em">左上角</span>入侵，沿外圈行进，从<span class="em">右上角</span>逃逸进入身体。<br>漏怪越多体温越高，<span class="em">到 42° 就发烧失败</span>。<br>每章 <span class="em">8 轮</span>小怪，<span class="em">第 4 轮后出 1 个 BOSS</span>。在中间格子摆放免疫细胞拦住它们！</p>
     <button class="btn big" id="startBtn">开始防御</button>
+  </div>
+
+  <!-- 战斗页（HOME）：默认入口，两个模式卡片 + 底部导航 -->
+  <div id="homeOverlay">
+    <div class="homeTitle">⚔️ 战斗</div>
+    <div class="homeCards">
+      <div class="modeCard" id="campaignCard" title="系统战役">
+        <div class="modeLabel">系统战役</div>
+        <img src="assets/campaign-card.png" alt="系统战役">
+      </div>
+      <div class="modeCard" id="guardCard" title="黏膜守卫">
+        <div class="modeLabel">黏膜守卫</div>
+        <img src="assets/mucous-guard.png" alt="黏膜守卫">
+      </div>
+    </div>
+    <div class="homeNav">
+      <div class="navTab active" data-tab="battle">
+        <div class="podium"></div>
+        <img class="icon" src="assets/nav/battle-active.png" alt="战斗">
+        <span>战斗</span>
+      </div>
+      <div class="navTab" data-tab="shop">
+        <div class="podium"></div>
+        <img class="icon" src="assets/nav/shop.png" alt="商城">
+        <span>商城</span>
+      </div>
+      <div class="navTab" data-tab="codex">
+        <div class="podium"></div>
+        <img class="icon" src="assets/nav/codex.png" alt="图鉴">
+        <span>图鉴</span>
+      </div>
+      <div class="navTab" data-tab="pool">
+        <div class="podium"></div>
+        <img class="icon" src="assets/nav/pool.png" alt="卡池">
+        <span>卡池</span>
+      </div>
+    </div>
   </div>
 
   <!-- 记忆观察者：经验满 → 暂停战斗 → 三选一 buff 弹层 -->
@@ -1864,6 +1965,8 @@ let progress = loadProgress();
 // ---------- 系统战役页面（选关地图）----------
 function showCampaign(){
   G && (G.running=false);
+  const home=document.getElementById('homeOverlay');
+  if(home) home.classList.add('hide');
   const ov=document.getElementById('overlay');
   ov.classList.remove('hide');
   let cards='';
@@ -1879,18 +1982,50 @@ function showCampaign(){
   ov.innerHTML = `<h1>🛡️ 系统战役</h1>
     <p>选择章节开始防御。<b>通关一章即解锁下一章</b>，可随时回看 / 重打已解锁章节。</p>
     <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:18px 0">${cards}</div>
+    <button class="btn" id="backHomeBtn">返回战斗页</button>
     <button class="btn" id="resetBtn">重置进度</button>`;
   ov.querySelectorAll('.ch-card:not(.locked)').forEach(el=>{
     el.style.cursor='pointer';
     el.onclick=()=>{ const i=+el.dataset.i; newGame(i); startRun(); };
   });
+  const bb=document.getElementById('backHomeBtn');
+  if(bb) bb.onclick=showBattleHome;
   const rb=document.getElementById('resetBtn');
   if(rb) rb.onclick=()=>{ try{localStorage.removeItem(SAVE_KEY);}catch(e){} progress={unlocked:0}; showCampaign(); };
 }
 
-// 复用：隐藏结算层 + 启动运行（newGame 之后调用，或从头 start）
+// ---------- 战斗页 HOME（默认入口）----------
+function showBattleHome(){
+  G && (G.running=false);
+  const ov=document.getElementById('overlay');
+  if(ov) ov.classList.add('hide');
+  const home=document.getElementById('homeOverlay');
+  if(home) home.classList.remove('hide');
+  const tabs = (document.querySelectorAll ? document.querySelectorAll('.homeNav .navTab') : []);
+  tabs.forEach(t=>{ t.classList.toggle('active', t.dataset.tab==='battle'); });
+}
+function bindHomeEvents(){
+  const campaignCard=document.getElementById('campaignCard');
+  if(campaignCard) campaignCard.onclick=()=>showCampaign();
+  const guardCard=document.getElementById('guardCard');
+  if(guardCard) guardCard.onclick=()=>alert('🛡️ 黏膜守卫模式正在开发，敬请期待！');
+  if(!document.querySelectorAll) return;
+  document.querySelectorAll('.homeNav .navTab').forEach(tab=>{
+    tab.onclick=()=>{
+      const key=tab.dataset.tab;
+      if(key==='battle'){ showBattleHome(); return; }
+      const names={shop:'商城',codex:'图鉴',pool:'卡池'};
+      alert('🚧 '+ (names[key]||key) +' 功能正在开发，敬请期待！');
+    };
+  });
+}
+
+// 复用：隐藏结算层 + 启动运行（newGame 之后调用）
 function startRun(){
-  document.getElementById('overlay').classList.add('hide');
+  const ov=document.getElementById('overlay');
+  if(ov) ov.classList.add('hide');
+  const home=document.getElementById('homeOverlay');
+  if(home) home.classList.add('hide');
   G.running = true;
   peakTemp = BAL.baseTemp;
   updateHUD();
@@ -1899,21 +2034,8 @@ function startRun(){
 
 // ---------- 启动 ----------
 let _frameCount = 0;
-function start(){
-  document.getElementById('overlay').classList.add('hide');
-  try {
-    newGame(0);
-    startRun();
-    // 二次保险：下一帧再确认 running（防止被某处异步重置）
-    setTimeout(()=>{
-      if(G && !G.running) G.running = true;
-    }, 100);
-  } catch(e) {
-    console.error('[start] CRASH:', e.message, e.stack);
-    alert('启动报错: '+e.message+'\n'+e.stack);
-  }
-}
-showCampaign();   // 初始进入系统战役（选关）页面，而非自动开战
+showBattleHome();   // 默认打开战斗页（HOME），含系统战役/黏膜守卫两个模式入口
+bindHomeEvents(); // 绑定模式卡片与底部导航
 
 setInterval(()=>{ if(G&&G.running) peakTemp=Math.max(peakTemp,G.temp); },100);
 

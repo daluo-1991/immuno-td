@@ -30,7 +30,7 @@ const document={getElementById(id){if(!els[id])els[id]=makeEl(id);return els[id]
 const window={};
 const ctx={document,window,localStorage,requestAnimationFrame:()=>{},setInterval:()=>0,setTimeout:(fn)=>0,alert:()=>{},console,Math,Date,JSON,Object,Array,Proxy,String,Number,Boolean,isNaN,parseInt,parseFloat};
 ctx.globalThis=ctx;
-const exposed=script+'\nwindow.__api={getG:()=>G,CELLS,eff,findMergeTarget,placeTower,trySwap,tryMoveOrSwap,drawTower,newGame,start};';
+const exposed=script+'\nwindow.__api={getG:()=>G,CELLS,eff,findMergeTarget,placeTower,trySwap,tryMoveOrSwap,drawTower,newGame};';
 new vm.Script(exposed).runInNewContext(ctx);
 const api=window.__api;
 
