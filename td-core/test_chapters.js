@@ -26,7 +26,7 @@ function makeEl(id){
   Object.defineProperty(el,'innerHTML',{get:()=>_html,set:v=>{_html=String(v); el._cards=null;}});
   return el;
 }
-const ctxStub=new Proxy({},{get(){return()=>{}}});
+const ctxStub=new Proxy({},{get(t,prop){ if(prop==='createRadialGradient'||prop==='createLinearGradient') return ()=>({addColorStop(){}}); return ()=>{}; }});
 const els={},docListeners={};
 const _store={};
 const localStorage={getItem:k=>(k in _store?_store[k]:null),setItem:(k,v)=>{_store[k]=String(v)},removeItem:k=>{delete _store[k]}};

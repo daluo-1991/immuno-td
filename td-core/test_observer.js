@@ -6,7 +6,7 @@ function makeEl(id){
   const el={id,_children:[],style:new Proxy({},{get:()=>'',set:()=>true}),
     classList:{_s:new Set(),add(c){this._s.add(c)},remove(c){this._s.delete(c)},toggle(c,f){f?this._s.add(c):this._s.delete(c)},contains(c){return this._s.has(c)}},
     addEventListener(){},appendChild(){},get childElementCount(){return 0},
-    getContext(){return new Proxy({},{get(){return()=>{}}})},
+    getContext(){return new Proxy({},{get(t,prop){ if(prop==='createRadialGradient'||prop==='createLinearGradient') return ()=>({addColorStop(){}}); return ()=>{}; }})},
     getBoundingClientRect(){return{left:0,top:0,width:336,height:432}},setPointerCapture(){},querySelectorAll(){return[]}};
   let h='';Object.defineProperty(el,'innerHTML',{get:()=>h,set:v=>{h=String(v)}});return el;
 }

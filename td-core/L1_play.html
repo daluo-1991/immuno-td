@@ -18,17 +18,19 @@
     background: radial-gradient(ellipse at 50% 25%, #101827 0%, #05070d 70%);
   }
 
-  /* ===== 顶部 HUD ===== */
+  /* ===== 顶部 HUD（卡通胶囊风格，对齐保卫向日葵状态栏） ===== */
   #hud {
-    display: flex; align-items: center; gap: 8px;
-    padding: 10px 12px 8px; position: relative; z-index: 5;
+    display: flex; align-items: stretch; gap: 7px;
+    padding: 9px 10px 7px; position: relative; z-index: 5;
   }
   .stat {
-    flex: 1; background: #131c2b; border: 1px solid #223049;
-    border-radius: 10px; padding: 6px 8px; text-align: center;
+    flex: 1; background: rgba(17,22,38,.72); border: 1px solid rgba(124,58,237,.45);
+    border-radius: 13px; padding: 6px 6px; text-align: center;
+    backdrop-filter: blur(6px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 3px 10px rgba(0,0,0,.3);
   }
-  .stat .label { font-size: 10px; color: #7d8ca3; letter-spacing: 1px; }
-  .stat .val { font-size: 17px; font-weight: 700; margin-top: 1px; }
+  .stat .label { font-size: 9.5px; color: #a9b3cc; letter-spacing: 1px; }
+  .stat .val { font-size: 16px; font-weight: 800; margin-top: 1px; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
   #energyVal { color: #ffd24a; }
   #waveVal { color: #6cc8ff; }
 
@@ -47,7 +49,7 @@
 
   /* ===== 画布 ===== */
   #stage { position: relative; align-self: center; margin-top: 2px; }
-  canvas { display: block; border-radius: 12px; touch-action: none; border: 2px solid #3a5070; }
+  canvas { display: block; touch-action: none; }
   /* 发烧火光 vignette */
   #fever {
     position: absolute; inset: 0; border-radius: 12px; pointer-events: none;
@@ -60,18 +62,20 @@
   #shopRow { display: flex; gap: 7px; min-height: 78px; overflow-x: hidden; padding-bottom: 2px; }
   #shopRow.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
   .slot {
-    flex: 1; min-height: 72px; border-radius: 11px; padding: 5px 2px;
-    background: #131c2b; border: 1.5px solid #263650;
+    flex: 1; min-height: 72px; border-radius: 13px; padding: 5px 2px;
+    background: rgba(17,22,38,.72); border: 1.5px solid rgba(124,58,237,.45);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 3px; cursor: pointer; position: relative; transition: transform .08s, border-color .1s;
+    gap: 3px; cursor: pointer; position: relative; transition: transform .08s, border-color .1s, box-shadow .12s;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 3px 10px rgba(0,0,0,.25);
+    backdrop-filter: blur(6px);
   }
   .slot:active { transform: scale(.94); }
-  .slot.sel { border-color: #ffd24a; box-shadow: 0 0 0 2px rgba(255,210,74,.3); }
+  .slot.sel { border-color: #ffd24a; box-shadow: 0 0 0 2px rgba(255,210,74,.35); }
   .slot.disabled { opacity: .4; }
-  .slot.empty { background: #0c1220; border-style: dashed; border-color: #1c2740; cursor: default; }
+  .slot.empty { background: rgba(12,16,28,.6); border-style: dashed; border-color: rgba(124,58,237,.3); cursor: default; }
   .slot.empty:active { transform: none; }
-  .slot .empty-mark { font-size: 11px; color: #3d4a5f; }
-  .slot .ico { width: 30px; height: 30px; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:#fff; }
+  .slot .empty-mark { font-size: 11px; color: #5a6b85; }
+  .slot .ico { width: 32px; height: 32px; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:#fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 2px 6px rgba(0,0,0,.3); }
   .slot .nm { font-size: 10px; color: #c4d0e0; }
   .slot .cost { font-size: 11px; font-weight: 700; color: #ffd24a; }
   .slot .cost.free::before { content: ""; }
@@ -159,22 +163,32 @@
   .em { color: #ffd24a; font-weight: 700; }
 
   /* ===== 左上工具栏（仿保卫向日葵左侧竖排功能） ===== */
-  #stage { position: relative; align-self: center; margin-top: 2px; display: inline-block; }
+  #stage {
+    position: relative; align-self: center; margin-top: 2px; display: inline-block;
+    /* 战斗页底图：黏膜/肠道场景（参考 背景.png），渐变兜底保证无图也好看 */
+    background-color: #0b1220;
+    background-image: linear-gradient(160deg, rgba(139,92,246,.20), rgba(34,211,238,.14)), url('assets/bg.png');
+    background-size: cover; background-position: center; background-repeat: no-repeat;
+    border-radius: 12px; overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,.45);
+  }
+  #cv { background: transparent; }
   #leftbar {
-    position: absolute; left: 0; top: 0; bottom: 0; width: 34px; z-index: 10;
+    position: absolute; left: 0; top: 0; bottom: 0; width: 36px; z-index: 10;
     display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
-    gap: 6px; padding: 4px 0;
-    background: linear-gradient(90deg, rgba(10,14,22,.85), rgba(10,14,22,0));
+    gap: 7px; padding: 6px 0;
+    background: linear-gradient(90deg, rgba(8,10,20,.78), rgba(8,10,20,0));
   }
   .lbtn {
-    width: 30px; height: 30px; border-radius: 9px; border: 1px solid #2c3c58;
-    background: #162031; color: #cdd9ec; font-size: 14px; line-height: 1; cursor: pointer;
+    width: 30px; height: 30px; border-radius: 11px; border: 1.5px solid rgba(192,132,252,.55);
+    background: linear-gradient(160deg,#7c3aed,#a855f7); color: #fff; font-size: 14px; line-height: 1; cursor: pointer;
     display: flex; align-items: center; justify-content: center; padding: 0;
-    transition: background .12s, border-color .12s, transform .08s;
+    box-shadow: 0 3px 8px rgba(124,58,237,.45), inset 0 1px 0 rgba(255,255,255,.35);
+    transition: transform .08s, filter .12s;
   }
-  .lbtn:active { transform: scale(.92); }
-  .lbtn.on  { background: #19c39e; color: #04221c; border-color: #19c39e; }
-  .lbtn.warn{ background: #ef4444; color: #fff;     border-color: #ef4444; }
+  .lbtn:active { transform: scale(.9); }
+  .lbtn.on  { background: linear-gradient(160deg,#22d3ee,#06b6d4); border-color: rgba(34,211,238,.7); color: #04323a; box-shadow: 0 3px 10px rgba(34,211,238,.5); }
+  .lbtn.warn{ background: linear-gradient(160deg,#f43f5e,#ef4444); border-color: rgba(244,63,94,.7); color: #fff; }
 
   /* ===== 伤害统计框 ===== */
   #statBox {
@@ -1042,16 +1056,15 @@ function addFloater(x,y,txt,color){ G.floaters.push({x,y,txt,color,life:0.9}); }
 // ---------- 渲染 ----------
 function render(){
   ctx.clearRect(0,0,cv.width,cv.height);
-  // 未初始化 → 显示等待画面
+  // 未初始化 → 显示等待画面（底图已由 #stage CSS 背景呈现，这里只压一层暗幕保证文字可读）
   if(!G){
-    ctx.fillStyle='#1a2332'; ctx.fillRect(0,0,cv.width,cv.height);
-    ctx.fillStyle='#64748b'; ctx.font='14px sans-serif'; ctx.textAlign='center';
+    ctx.fillStyle='rgba(5,7,13,.55)'; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.fillStyle='#cdd9ec'; ctx.font='bold 15px sans-serif'; ctx.textAlign='center';
     ctx.fillText('点击「开始防御」', cv.width/2, cv.height/2);
     return;
   }
 
-  // 背景（深蓝灰——必须与格子有区分度）
-  ctx.fillStyle='#162030'; ctx.fillRect(0,0,LEVEL.cols*CELL,LEVEL.rows*CELL);
+  // 背景已由 #stage CSS 铺 背景.png（黏膜/肠道场景），canvas 透明叠加，仅画格子/路径/塔/病毒
 
   // 格子
   for(let r=0;r<LEVEL.rows;r++)for(let c=0;c<LEVEL.cols;c++){
@@ -1228,12 +1241,21 @@ function drawEndpoint(p,color,txt){
 }
 function drawTower(t, maxDmg){
   const d=CELLS[t.type]; const px=t.col*CELL, py=t.row*CELL, sz=d.size*CELL;
-  const cx=px+sz/2, cy=py+sz/2, r=sz*0.36;
-  ctx.fillStyle=d.color+'66'; roundRect(px+3,py+3,sz-6,sz-6,8); ctx.fill();
-  ctx.fillStyle=d.color; ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.fill();
-  ctx.strokeStyle='#ffffff55'; ctx.lineWidth=1.5; ctx.stroke();
-  ctx.fillStyle='#fff'; ctx.font='bold '+(d.size>1?15:13)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(d.short,cx,cy);
+  const cx=px+sz/2, cy=py+sz/2, r=sz*0.34;
+  // 卡通细胞团：柔和渐变底 + 高光 + 描边
+  const g=ctx.createRadialGradient(cx-r*0.3,cy-r*0.35,r*0.2, cx,cy,r*1.05);
+  g.addColorStop(0, lighten(d.color,0.35));
+  g.addColorStop(1, d.color);
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.75)'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,.35)'; ctx.beginPath(); ctx.arc(cx-r*0.32,cy-r*0.38,r*0.28,0,7); ctx.fill();
+  // 眼睛（萌系）
+  const eyeY=cy-r*0.05, eyeDx=r*0.34, eyeR=r*0.13;
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx-eyeDx,eyeY,eyeR,0,7); ctx.arc(cx+eyeDx,eyeY,eyeR,0,7); ctx.fill();
+  ctx.fillStyle='#1a1030'; ctx.beginPath(); ctx.arc(cx-eyeDx,eyeY,eyeR*0.55,0,7); ctx.arc(cx+eyeDx,eyeY,eyeR*0.55,0,7); ctx.fill();
+  // 嘴（小弧线）
+  ctx.strokeStyle='rgba(26,16,48,.7)'; ctx.lineWidth=1.6; ctx.beginPath();
+  ctx.arc(cx,cy+r*0.18,r*0.3,0.15*Math.PI,0.85*Math.PI); ctx.stroke();
   // §7 合成主线：tier≥2 画阶数角标（不压缩占位，仅视觉叠加）
   const k=t.tier||1;
   if(k>1){
@@ -1256,23 +1278,46 @@ function drawVirus(v){
   const p=virusPos(v); const x=p.x*CELL, y=p.y*CELL; const vc=VIRUSES[v.type];
   const isBoss = !!vc.boss;
   const r = isBoss ? 19 : 11;
-  ctx.fillStyle=vc.color; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
-  ctx.strokeStyle=vc.color; ctx.lineWidth= isBoss?3:2; ctx.stroke();
-  for(let a=0;a<6;a++){ const ang=a/6*Math.PI*2; ctx.beginPath(); ctx.moveTo(x+Math.cos(ang)*r,y+Math.sin(ang)*r); ctx.lineTo(x+Math.cos(ang)*(r+(isBoss?7:4)),y+Math.sin(ang)*(r+(isBoss?7:4))); ctx.stroke(); }
+  // 尖刺（卡通病毒衣壳）
+  ctx.strokeStyle=vc.color; ctx.lineWidth= isBoss?3:2;
+  for(let a=0;a<8;a++){ const ang=a/8*Math.PI*2; const sp=r+(isBoss?8:5);
+    ctx.beginPath(); ctx.moveTo(x+Math.cos(ang)*r,y+Math.sin(ang)*r); ctx.lineTo(x+Math.cos(ang)*sp,y+Math.sin(ang)*sp); ctx.stroke();
+    ctx.fillStyle=vc.color; ctx.beginPath(); ctx.arc(x+Math.cos(ang)*sp,y+Math.sin(ang)*sp, isBoss?2.6:1.8,0,7); ctx.fill();
+  }
+  // 身体（渐变圆）
+  const g=ctx.createRadialGradient(x-r*0.3,y-r*0.35,r*0.2, x,y,r);
+  g.addColorStop(0, lighten(vc.color,0.3)); g.addColorStop(1, vc.color);
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=1.5; ctx.stroke();
+  // 眼睛（萌系，BOSS 怒眉）
+  const eyeY=y-r*0.05, eyeDx=r*0.36, eyeR=r*0.16;
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(x-eyeDx,eyeY,eyeR,0,7); ctx.arc(x+eyeDx,eyeY,eyeR,0,7); ctx.fill();
+  ctx.fillStyle='#1a1030'; ctx.beginPath(); ctx.arc(x-eyeDx,eyeY,eyeR*0.5,0,7); ctx.arc(x+eyeDx,eyeY,eyeR*0.5,0,7); ctx.fill();
+  // 嘴
+  ctx.strokeStyle='#1a1030'; ctx.lineWidth= isBoss?2:1.5;
+  ctx.beginPath();
+  if(isBoss){ ctx.arc(x,y+r*0.25,r*0.32,1.15*Math.PI,1.85*Math.PI); }  // 倒弧=怒
+  else { ctx.arc(x,y+r*0.18,r*0.28,0.15*Math.PI,0.85*Math.PI); }
+  ctx.stroke();
   if(isBoss){
     // BOSS 王冠标记
     ctx.fillStyle='#ffd24a'; ctx.font='bold 14px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('★', x, y-2);
-  } else {
-    ctx.fillStyle='#05070d'; ctx.beginPath(); ctx.arc(x-3.5,y-1,2,0,7); ctx.arc(x+3.5,y-1,2,0,7); ctx.fill();
   }
-  if(v.vuln>1){ ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(x,y,r+6,0,7); ctx.stroke(); }
+  if(v.vuln>1){ ctx.strokeStyle='#f59e0b'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(x,y,r+7,0,7); ctx.stroke(); }
   const w = isBoss?42:22, hp=Math.max(0,v.hp/v.maxhp);
-  const by = isBoss ? y-r-14 : y-r-9;
+  const by = isBoss ? y-r-16 : y-r-10;
   ctx.fillStyle='#000a'; ctx.fillRect(x-w/2,by,w,4);
   ctx.fillStyle= hp>0.5?'#22c55e':hp>0.25?'#eab308':'#ef4444'; ctx.fillRect(x-w/2,by,w*hp,4);
 }
 function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+// 颜色提亮（用于卡通高光渐变），输入 #rrggbb
+function lighten(hex,amt){
+  const m=hex.replace('#',''); const n=parseInt(m.length===3?m.split('').map(c=>c+c).join(''):m,16);
+  let r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+  r=Math.round(r+(255-r)*amt); g=Math.round(g+(255-g)*amt); b=Math.round(b+(255-b)*amt);
+  return 'rgb('+r+','+g+','+b+')';
+}
 
 // ---------- HUD ----------
 // 轮次标签：小怪轮显示 1~8/8，BOSS 事件显示 BOSS
@@ -1339,7 +1384,7 @@ function renderShop(){
       } else {
         const tp=cardType(item), k=cardTier(item), d=CELLS[tp];
         el.className='slot'+(G.selected===i?' sel':'');
-        el.innerHTML=`<div class="ico" style="background:${d.color}">${d.short}</div><div class="nm">${d.name}${k>=2?` Lv.${k}`:''}</div><div class="cost free">免费</div>`;
+        el.innerHTML=`<div class="ico" style="background:radial-gradient(circle at 35% 30%, ${lighten(d.color,0.35)}, ${d.color})">${d.short}</div><div class="nm">${d.name}${k>=2?` Lv.${k}`:''}</div><div class="cost free">免费</div>`;
         el.style.cursor='grab'; el.style.touchAction='none';
         el.addEventListener('pointerdown', ev=>startShopDrag(i, ev));   // 细胞卡：可拖到棋盘（拖到占用格→交换，§8.2）
       }

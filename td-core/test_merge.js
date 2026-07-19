@@ -18,7 +18,11 @@ function makeEl(id){
   let _html=''; Object.defineProperty(el,'innerHTML',{get:()=>_html,set:v=>{_html=String(v);}});
   return el;
 }
-const ctxStub=new Proxy({},{get(){return()=>{}}});
+const ctxStub=new Proxy({},{get(t,prop){
+  if(prop==='createRadialGradient'||prop==='createLinearGradient') return ()=>({addColorStop(){}});
+  if(prop==='canvas') return {width:336,height:432};
+  return ()=>{};
+}});
 const els={},docListeners={};
 const _store={};
 const localStorage={getItem:k=>(k in _store?_store[k]:null),setItem:(k,v)=>{_store[k]=String(v)},removeItem:k=>{delete _store[k]}};
