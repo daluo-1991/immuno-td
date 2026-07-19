@@ -14,7 +14,8 @@
   }
   /* 逻辑设计分辨率 750×1334（微信小游戏官方基准），由 fitApp() 按窗口等比缩放 */
   #app {
-    width: 750px; height: 1334px; position: relative; flex: none;
+    width: 750px; height: 1334px;
+    position: absolute; left: 50%; top: 50%;
     transform-origin: center center;
     display: flex; flex-direction: column;
     background: radial-gradient(ellipse at 50% 25%, #101827 0%, #05070d 70%);
@@ -2012,7 +2013,7 @@ function fitApp(){
   const app=document.getElementById('app');
   if(!app) return;
   const s=Math.min(window.innerWidth/750, window.innerHeight/1334);
-  app.style.transform='scale('+s+')';
+  app.style.transform='translate(-50%, -50%) scale('+s+')';
 }
 if(window.addEventListener) window.addEventListener('resize', fitApp);
 fitApp();
