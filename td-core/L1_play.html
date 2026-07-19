@@ -2001,8 +2001,14 @@ function spendStamina(n){
 function updateStaminaHUD(){
   const cdText = (function(){
     if(stamina.stamina >= STAMINA_MAX) return '已满';
-    const remain = STAMINA_REGEN_MS - (Date.now() - stamina.lastTs);
-    return Math.max(1, Math.ceil(remain/60000)) + 'm 后 +1';
+    // 下一滴体力到账的真实时刻 = lastTs + 一个完整恢复周期
+    const nextTs = stamina.lastTs + STAMINA_REGEN_MS;
+    let remain = Math.max(0, nextTs - Date.now());
+    const m = Math.floor(remain / 60000);
+    const s = Math.floor((remain % 60000) / 1000);
+    const mm = String(m).padStart(2, '0');
+    const ss = String(s).padStart(2, '0');
+    return mm + ':' + ss + ' 后 +1';
   })();
   const valText = stamina.stamina + '/' + STAMINA_MAX;
   // 关卡战斗页 HUD

@@ -42,7 +42,13 @@ ok('spendStamina(5) 返回 true', r===true);
 ok('扣减后 = 35', api.getStamina().stamina===before-5);
 api.updateStaminaHUD();
 ok('HUD 显示 35/40', sv()==='35/40');
-ok('cd 显示倒计时(含"后 +1")', /后 \+1/.test(cd()));
+ok('cd 显示精确秒倒计时(mm:ss 后 +1)', /^\d{1,2}:\d{2} 后 \+1$/.test(cd()));
+
+// 2b. 倒计时秒级精度：lastTs 设为 1 分 30 秒前 → 应显示 08:xx 后 +1（精确到秒）
+const T=Date.now();
+api.setStamina({stamina:35, lastTs: T - (90*1000)});
+api.updateStaminaHUD();
+ok('倒计时秒级精度(1:30 前→08:xx, mm:ss 格式)', /^08:\d{2} 后 \+1$/.test(cd()));
 
 // 3. 不足拦截
 api.setStamina({stamina:3,lastTs:Date.now()});
