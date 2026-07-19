@@ -2008,7 +2008,7 @@ function updateStaminaHUD(){
     const s = Math.floor((remain % 60000) / 1000);
     const mm = String(m).padStart(2, '0');
     const ss = String(s).padStart(2, '0');
-    return mm + ':' + ss + ' 后 +1';
+    return mm + ':' + ss;
   })();
   const valText = stamina.stamina + '/' + STAMINA_MAX;
   // 关卡战斗页 HUD
