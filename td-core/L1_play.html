@@ -50,7 +50,15 @@
   #tempVal { color: #ff8a5c; }
 
   /* ===== 画布（750 基准：canvas 逻辑 336×432，CSS 拉满显示，指针按比例映射） ===== */
-  #stage { position: relative; align-self: center; margin-top: 4px; width: 100%; max-width: 660px; }
+  #stage {
+    position: relative; align-self: center; margin-top: 4px; width: 100%; max-width: 690px; display: block;
+    /* 战斗页底图：黏膜/肠道场景（参考 背景.png），渐变兜底保证无图也好看 */
+    background-color: #0b1220;
+    background-image: linear-gradient(160deg, rgba(139,92,246,.20), rgba(34,211,238,.14)), url('assets/bg.png');
+    background-size: cover; background-position: center; background-repeat: no-repeat;
+    border-radius: 24px; overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,.45);
+  }
   canvas { display: block; touch-action: none; width: 100%; height: auto; border-radius: 24px; }
   /* 发烧火光 vignette */
   #fever {
@@ -165,16 +173,6 @@
   .em { color: #ffd24a; font-weight: 700; }
 
   /* ===== 左上工具栏（仿保卫向日葵左侧竖排功能） ===== */
-  #stage {
-    position: relative; align-self: center; margin-top: 4px; display: inline-block;
-    /* 战斗页底图：黏膜/肠道场景（参考 背景.png），渐变兜底保证无图也好看 */
-    background-color: #0b1220;
-    background-image: linear-gradient(160deg, rgba(139,92,246,.20), rgba(34,211,238,.14)), url('assets/bg.png');
-    background-size: cover; background-position: center; background-repeat: no-repeat;
-    border-radius: 24px; overflow: hidden;
-    box-shadow: 0 8px 30px rgba(0,0,0,.45);
-  }
-  #cv { background: transparent; }
   #leftbar {
     position: absolute; left: 0; top: 0; bottom: 0; width: 72px; z-index: 10;
     display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
@@ -685,9 +683,7 @@ const PREP_TIME = 30;   // 开局准备期（秒）：玩家可布防，倒计�
 const CELL = 48;
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 cv.width = LEVEL.cols*CELL; cv.height = LEVEL.rows*CELL;
-cv.style.width = cv.width+'px'; cv.style.height = cv.height+'px';
-document.getElementById('fever').style.width = cv.width+'px';
-document.getElementById('fever').style.height = cv.height+'px';
+// CSS 负责把 canvas 拉满 #stage，这里不再用 inline style 锁定物理尺寸，避免 336×432 在宽 stage 中只居左显示。
 
 // ---------- 游戏状态 ----------
 let G = null;
@@ -1300,13 +1296,6 @@ function render(){
     ctx.fillText(Math.ceil(G.prepTimer), cv.width/2, cv.height/2 - 16);
     ctx.fillStyle='#e6edf3'; ctx.font='bold 18px sans-serif';
     ctx.fillText('布防阶段', cv.width/2, cv.height/2 + 34);
-  }
-
-  // ★ 调试信息（临时，确认后删除）
-  if(G){
-    ctx.fillStyle='rgba(255,255,255,.85)'; ctx.font='11px monospace'; ctx.textAlign='left';
-    const dbg = `F=${_frameCount} t=${_gameTime.toFixed(1)}s phase=${G.phase||'?'} spawnLeft=${G.spawnLeft??'?'} shop=${G.shop?.length||0} viruses=${G.viruses.length} run=${G.running} dt_last=${(_lastDt||0).toFixed(3)}`;
-    ctx.fillText(dbg, 4, LEVEL.rows*CELL - 6);
   }
 
   updateMergeButton();   // 合成按钮：满足条件即浮现（每帧检测，无需手动刷新）
