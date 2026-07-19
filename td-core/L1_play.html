@@ -238,12 +238,11 @@
   }
   .modeCard {
     position: relative; width: 590px; border-radius: 36px; overflow: hidden;
-    border: 6px solid #a78bfa; box-shadow: 0 10px 28px rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.1);
-    background: #1a1038; cursor: pointer;
-    transition: transform .12s, box-shadow .12s, border-color .12s;
+    background: transparent; cursor: pointer;
+    transition: transform .12s;
   }
   .modeCard:active { transform: scale(.97); }
-  .modeCard:hover { border-color: #c4b5fd; box-shadow: 0 14px 34px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.15); }
+  .modeCard:hover { transform: translateY(-2px); }
   .modeCard img { display: block; width: 100%; height: auto; object-fit: cover; }
   .homeNav {
     width: calc(100% + 64px); height: 192px; margin-top: auto;
