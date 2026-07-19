@@ -35,6 +35,8 @@
   .stat .label { font-size: 19px; color: #a9b3cc; letter-spacing: 2px; }
   .stat .val { font-size: 32px; font-weight: 800; margin-top: 2px; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
   #energyVal { color: #ffd24a; }
+  #staminaVal { color: #ff5fa2; }
+  #staminaStat .cd { font-size: 13px; color: #9aa6c0; margin-top: 3px; }
   #waveVal { color: #6cc8ff; }
 
   /* 体温条 */
@@ -278,6 +280,11 @@
     <div class="stat"><div class="label">章节</div><div class="val" id="chapterVal">第 1 章</div></div>
     <div class="stat"><div class="label">轮次</div><div class="val" id="waveVal">1/8</div></div>
     <div class="stat"><div class="label">能量</div><div class="val" id="energyVal">40</div></div>
+    <div class="stat" id="staminaStat">
+      <div class="label">体力</div>
+      <div class="val" id="staminaVal">40/40</div>
+      <div class="cd" id="staminaCd">已满</div>
+    </div>
     <div class="stat" id="tempWrap">
       <div class="label">体温 <span id="tempVal">37.0°</span></div>
       <div id="tempBar"><div id="tempFill"></div></div>
@@ -1909,7 +1916,7 @@ function endGame(win){
     ov.innerHTML = `<h1>🤒 发烧失败</h1><p>体温飙到 <span class="em">42°</span>，病毒攻陷身体。<br>漏怪太多——把塔往<span class="em">出口(右上)侧</span>多摆，或多摆红细胞攒能量堆更多塔。</p>
       <button class="btn big" id="againBtn">重玩本章</button>
       <button class="btn" id="campBtn">返回战役</button>`;
-    document.getElementById('againBtn').onclick = ()=>{ newGame(idx); startRun(); };
+    document.getElementById('againBtn').onclick = ()=>{ tryEnterChapter(idx); };
     document.getElementById('campBtn').onclick = showCampaign;
   }
 }
@@ -1930,6 +1937,63 @@ function saveUnlocked(idx){
   }
 }
 let progress = loadProgress();
+
+// ---------- 体力系统（每次闯关 -5，上限 40，每 10 分钟 +1）----------
+const STAMINA_MAX = 40;
+const STAMINA_COST = 5;
+const STAMINA_REGEN_MS = 10 * 60 * 1000;   // 10 分钟
+const STAMINA_KEY = 'immuno_td_stamina_v1';
+
+function loadStamina(){
+  try {
+    const r = JSON.parse(localStorage.getItem(STAMINA_KEY)) || {};
+    let s = (typeof r.stamina==='number') ? Math.max(0, Math.min(STAMINA_MAX, r.stamina|0)) : STAMINA_MAX;
+    if(typeof r.lastTs!=='number') r.lastTs = Date.now();
+    const elapsed = Date.now() - r.lastTs;
+    if(elapsed > 0 && s < STAMINA_MAX){
+      const rec = Math.floor(elapsed / STAMINA_REGEN_MS);
+      if(rec > 0){
+        s = Math.min(STAMINA_MAX, s + rec);
+        r.lastTs = (s >= STAMINA_MAX) ? Date.now() : r.lastTs + rec * STAMINA_REGEN_MS;
+      }
+    }
+    if(s >= STAMINA_MAX) r.lastTs = Date.now();
+    return { stamina: s, lastTs: r.lastTs };
+  } catch(e){}
+  return { stamina: STAMINA_MAX, lastTs: Date.now() };
+}
+function saveStamina(st){ try{ localStorage.setItem(STAMINA_KEY, JSON.stringify(st)); }catch(e){} }
+let stamina = loadStamina();
+
+function staminaRecover(){
+  if(stamina.stamina >= STAMINA_MAX) return;
+  const elapsed = Date.now() - stamina.lastTs;
+  if(elapsed >= STAMINA_REGEN_MS){
+    const rec = Math.floor(elapsed / STAMINA_REGEN_MS);
+    stamina.stamina = Math.min(STAMINA_MAX, stamina.stamina + rec);
+    stamina.lastTs = (stamina.stamina >= STAMINA_MAX) ? Date.now() : stamina.lastTs + rec * STAMINA_REGEN_MS;
+    saveStamina(stamina);
+  }
+}
+function spendStamina(n){
+  if(stamina.stamina < n) return false;
+  stamina.stamina -= n;
+  saveStamina(stamina);
+  updateStaminaHUD();
+  return true;
+}
+function updateStaminaHUD(){
+  const el=document.getElementById('staminaVal'); if(!el) return;
+  el.textContent = stamina.stamina + '/' + STAMINA_MAX;
+  const cd=document.getElementById('staminaCd');
+  if(cd){
+    if(stamina.stamina >= STAMINA_MAX){ cd.textContent='已满'; }
+    else {
+      const remain = STAMINA_REGEN_MS - (Date.now() - stamina.lastTs);
+      cd.textContent = Math.max(1, Math.ceil(remain/60000)) + 'm 后 +1';
+    }
+  }
+}
 
 // ---------- 系统战役页面（选关地图）----------
 function showCampaign(){
@@ -1955,7 +2019,7 @@ function showCampaign(){
     <button class="btn" id="resetBtn">重置进度</button>`;
   ov.querySelectorAll('.ch-card:not(.locked)').forEach(el=>{
     el.style.cursor='pointer';
-    el.onclick=()=>{ const i=+el.dataset.i; newGame(i); startRun(); };
+    el.onclick=()=>{ tryEnterChapter(+el.dataset.i); };
   });
   const bb=document.getElementById('backHomeBtn');
   if(bb) bb.onclick=showBattleHome;
@@ -2000,10 +2064,20 @@ function startRun(){
   updateHUD();
   renderShop();
 }
+// 进入一章战斗：先扣体力，不足则拦截
+function tryEnterChapter(i){
+  if(!spendStamina(STAMINA_COST)){
+    alert('体力不足（每次闯关消耗 '+STAMINA_COST+' 点），每 10 分钟恢复 1 点，请稍后再来。');
+    return;
+  }
+  newGame(i); startRun();
+}
 
 // ---------- 启动 ----------
 let _frameCount = 0;
 showBattleHome();   // 默认打开战斗页（HOME），含系统战役/黏膜守卫两个模式入口
+updateStaminaHUD();
+setInterval(()=>{ staminaRecover(); updateStaminaHUD(); }, 1000);   // 体力恢复 tick（每秒刷新显示）
 bindHomeEvents(); // 绑定模式卡片与底部导航
 
 // 750×1334 逻辑分辨率 → 按窗口等比缩放（桌面预览 / 真机适配统一）
