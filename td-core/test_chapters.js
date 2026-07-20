@@ -71,7 +71,7 @@ const ov=document.getElementById('overlay');
 ok('第1章通关 → 显示结算页(含「确定」)', ov.innerHTML.includes('确定'));
 document.getElementById('okBtn').onclick();   // 点「确定」→ 进入战役页
 ok('确定后进入「系统战役」页', ov.innerHTML.includes('系统战役'));
-ok('通关后第2章已解锁 (progress.unlocked>=1)', api.getProgress().unlocked>=1);
+ok('通关后第2章已解锁 (progress.immune>=1)', api.getProgress().immune>=1);
 const unlockedCards = ov.querySelectorAll('.ch-card:not(.locked)');
 const ch2 = unlockedCards.find(c=>c.dataset.i==='1');
 ok('战役页第2章卡片可点击(非locked)', !!ch2);
@@ -83,7 +83,7 @@ console.log('=== 5. 末章通关 → 全部通关 + 全部标记已通关 ===');
 api.newGame(4); api.endGame(true);
 ok('第5章通关 → 显示「全部通关 · 查看战役」', document.getElementById('overlay').innerHTML.includes('全部通关'));
 document.getElementById('okBtn').onclick();
-ok('全通后所有5章解锁(progress.unlocked>=5)', api.getProgress().unlocked>=5);
+ok('全通后所有5章解锁(progress.immune>=5)', api.getProgress().immune>=5);
 ok('战役页渲染全部5章卡片', document.getElementById('overlay').innerHTML.split('data-i="').length-1===5);
 
 console.log('=== 6. 失败 → 返回战役 ===');

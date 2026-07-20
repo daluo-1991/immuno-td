@@ -51,6 +51,8 @@
     transition: width .15s linear;
   }
   #tempVal { color: #ff8a5c; }
+  #energyBar { height: 6px; width: 100%; margin-top: 3px; border-radius: 4px; overflow: hidden; background: #0a1018; border: 1px solid #223049; position: relative; }
+  #energyFill { height: 100%; width: 0%; background: linear-gradient(90deg,#f97316,#ffd24a); transition: width .15s linear; }
 
   /* ===== 画布（750 基准：舞台固定 630×810 = 7:9 比例，canvas 填满） ===== */
   #stage {
@@ -225,6 +227,71 @@
   .helpBody b { color: #ffd24a; }
   .helpBody .h { color: #6cc8ff; font-weight: 800; display: block; margin-top: 16px; }
 
+  /* ===== 横屏陈塘关布局（参考王者·守卫陈塘关：左侧 LV、顶部时间、右侧英雄、底部箭塔） ===== */
+  #app.landscape {
+    width: 1334px; height: 750px;
+    display: grid;
+    grid-template-rows: 64px 1fr;
+    grid-template-columns: 200px 1fr 200px;
+    grid-template-areas:
+      "top top top"
+      "left stage right";
+    align-items: center; justify-items: center;
+    background: radial-gradient(ellipse at 50% 35%, #1c1426 0%, #0a080f 70%);
+  }
+  #app.landscape #hud, #app.landscape #obsBar, #app.landscape #shop { display: none !important; }
+
+  #chenTop {
+    display: none; grid-area: top; width: 100%; height: 100%;
+    align-items: center; justify-content: space-between;
+    padding: 0 36px;
+    background: rgba(17,22,38,.78); border-bottom: 2px solid rgba(224,83,61,.45);
+    box-shadow: 0 4px 14px rgba(0,0,0,.35);
+  }
+  #app.landscape #chenTop { display: flex; }
+  .ct-title { font-size: 28px; font-weight: 800; color: #ffe4d6; letter-spacing: 2px; }
+  .ct-time { font-size: 24px; color: #fbbf24; font-weight: 700; }
+  .ct-tools { display: flex; gap: 12px; }
+
+  #leftPanel {
+    display: none; grid-area: left; width: 100%; height: 100%; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; padding: 20px;
+  }
+  #rightPanel {
+    display: none; grid-area: right; width: 100%; height: 100%; flex-direction: column;
+    align-items: center; justify-content: flex-end; padding: 20px;
+  }
+  #app.landscape #leftPanel, #app.landscape #rightPanel { display: flex; }
+
+  .lp-card {
+    width: 100%; background: rgba(17,22,38,.72); border: 2px solid rgba(224,83,61,.45);
+    border-radius: 24px; padding: 18px 14px; text-align: center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 4px 14px rgba(0,0,0,.3);
+  }
+  .lp-lv { font-size: 42px; font-weight: 900; color: #ffd24a; line-height: 1; }
+  .lp-label { font-size: 18px; color: #a9b3cc; margin-top: 6px; letter-spacing: 2px; }
+  .lp-exp { font-size: 22px; color: #e6edf3; font-weight: 700; margin-top: 4px; }
+  .lp-expbar { width: 100%; height: 10px; border-radius: 6px; overflow: hidden; background: #0a1018; border: 1px solid #223049; margin-top: 8px; }
+  .lp-expfill { height: 100%; width: 0%; background: linear-gradient(90deg,#f97316,#ffd24a); transition: width .15s linear; }
+  .lp-skills { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+  .lp-skill { background: rgba(17,22,38,.62); border: 1px solid rgba(224,83,61,.35); border-radius: 14px; padding: 8px 10px; font-size: 17px; color: #e6edf3; text-align: center; }
+
+  .rp-hero {
+    width: 160px; height: 220px; border-radius: 24px;
+    background: linear-gradient(160deg, #e0533d, #9c3d2a);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 6px 18px rgba(224,83,61,.4);
+  }
+
+  #app.landscape #stage {
+    grid-area: stage;
+    width: 768px; height: 432px;
+    margin: 0; align-self: center; justify-self: center;
+  }
+  #app.landscape #leftbar { display: none; }
+  #app.landscape canvas { border-radius: 24px; }
+
   /* ===== 战斗页 HOME（默认入口：两个模式卡片 + 底部导航） ===== */
   #homeOverlay {
     position: absolute; inset: 0; z-index: 50;
@@ -282,15 +349,49 @@
     transition: filter .15s, transform .1s;
   }
   .navTab.active .icon { filter: none; opacity: 1; transform: translateY(-4px); }
+
+  /* ===== 全局提示（替代 alert，兼容微信小游戏）===== */
+  #toast {
+    position: absolute; left: 50%; top: 80px; transform: translateX(-50%) translateY(-20px);
+    z-index: 100; padding: 14px 28px; border-radius: 18px; font-size: 24px; font-weight: 700;
+    color: #fff; background: rgba(220,38,38,.92); border: 2px solid rgba(255,255,255,.25);
+    box-shadow: 0 8px 24px rgba(0,0,0,.45); pointer-events: none;
+    opacity: 0; transition: opacity .2s, transform .2s;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.info { background: rgba(15,163,180,.92); }
 </style>
 </head>
 <body>
 <div id="app">
+  <!-- 横屏陈塘关专属：顶部条、左侧面板、右侧面板（ portrait 下隐藏） -->
+  <div id="chenTop">
+    <div class="ct-title">无尽关卡</div>
+    <div class="ct-time">守卫时间：<span id="ctTimer">0:00:00</span></div>
+    <div class="ct-tools">
+      <button class="lbtn" id="chenPauseBtn" title="暂停/继续">⏸</button>
+      <button class="lbtn" id="chenSpeedBtn" title="倍速 1×/2×">▶</button>
+      <button class="lbtn" id="chenHelpBtn" title="帮助">❓</button>
+    </div>
+  </div>
+  <div id="leftPanel">
+    <div class="lp-card">
+      <div class="lp-lv" id="leftLv">LV 1</div>
+      <div class="lp-label">箭塔等级</div>
+      <div class="lp-exp" id="leftExp">0/6</div>
+      <div class="lp-expbar"><div class="lp-expfill" id="leftExpFill"></div></div>
+    </div>
+    <div class="lp-skills" id="leftSkills"></div>
+  </div>
+  <div id="rightPanel">
+    <!-- 右侧预留英雄位，立绘后续按需加入 -->
+  </div>
+
   <!-- HUD -->
   <div id="hud">
     <div class="stat"><div class="label">章节</div><div class="val" id="chapterVal">第 1 章</div></div>
     <div class="stat"><div class="label">轮次</div><div class="val" id="waveVal">1/8</div></div>
-    <div class="stat"><div class="label">能量</div><div class="val" id="energyVal">40</div></div>
+    <div class="stat"><div class="label">能量</div><div class="val" id="energyVal">40</div><div id="energyBar"><div id="energyFill"></div></div></div>
     <div class="stat" id="staminaStat">
       <div class="label">体力</div>
       <div class="val" id="staminaVal">40/40</div>
@@ -397,6 +498,7 @@
       <button class="btn big" id="helpClose">知道了</button>
     </div>
   </div>
+  <div id="toast"></div>
 </div>
 
 <script>
@@ -733,7 +835,20 @@ function pickTileShape(){
 }
 
 // ---------- L1 关卡（7×9 总画布，外环路径，内 5×7 摆位区） ----------
-// 坐标系：col 0-6(左→右), row 0-8(上→下)
+// ---------- 陈塘关横板路径（16×9）：入口在顶部正中，沿横向回廊盘绕到底部正中出口 ----------
+// 与系统战役 7×9 网格完全独立，适配“箭塔在底部正中间、180° 自由瞄准”的横板体验。
+const C_PATH_H = [];
+(function(){
+  const p=(c,r)=>C_PATH_H.push([c,r]);
+  for(let r=0;r<=3;r++) p(8,r);         // 顶部入口 ↓ 到中上
+  for(let c=7;c>=0;c--) p(c,3);         // 左行 ←
+  for(let r=4;r<=5;r++) p(0,r);         // 左列 ↓
+  for(let c=1;c<=15;c++) p(c,5);        // 中行 → 到最右
+  for(let r=6;r<=7;r++) p(15,r);        // 右列 ↓
+  for(let c=14;c>=0;c--) p(c,7);        // 下行 ← 到最左
+  p(0,8);                               // 左下 ↓ 一格
+  for(let c=1;c<=8;c++) p(c,8);         // 底部 → 到出口（正中）
+})();
 // 外圈(col 0/col 6/row 0/row 8)=病毒通道 | 内格(col 1-5, row 1-7)=5×7 摆位区
 // ---------- 多章配置（线性闯关：依次过关 + 难度递进）----------
 // 所有章共享 7×9 棋盘、C 形路径、中央 3×3 绿簇；差异仅在章节名与波次/敌人强度。
@@ -745,6 +860,40 @@ const C_PATH = [
 const RESERVED = [ [2,3],[3,3],[4,3], [2,4],[3,4],[4,4], [2,5],[3,5],[4,5] ];
 
 // 章内节奏：8 轮小怪 + 1 BOSS，共 9 出怪事件；难度随章号(idx)递增
+// ===================== 守卫陈塘关 战役线（对标王者荣耀·守卫陈塘关）=====================
+// 结构：6 普通关（线性递增）+ 第 7 关无尽冲榜（endless，对标王者 25 分钟 / 20 分钟后 BOSS）
+// 普通关：清完所有波次即通关；无尽关：撑满 endlessSec 即胜（BOSS 阶段计入队列，后续 D 任务接冲榜结算）
+const CHAPTER_COUNT_CHEN = 7;
+const LEVELS_CHEN = [];
+for(let i=0;i<CHAPTER_COUNT_CHEN;i++){
+  const endless = (i === CHAPTER_COUNT_CHEN-1);            // 第 7 关 = 无尽关
+  const waves = endless
+    ? chenEndlessWaves()                                  // 无尽关：海量波次，BOSS 阶段在 20 分钟处介入
+    : chapterWaves(i);
+  LEVELS_CHEN.push({
+    cols:16, rows:9,                                       // 横板 16:9 视野
+    campaign:'chen',
+    chapterName: endless ? '守卫陈塘关·无尽' : '守卫陈塘关·第 '+(i+1)+' 关',
+    roundTotal: endless ? 999 : 8,
+    entrance:{col:8,row:0}, exit:{col:8,row:8},            // 入口上中、出口下中（箭塔位置）
+    path:C_PATH_H, preplaced:[],
+    reserved:[],                                           // 陈塘关无开格需求
+    waves,
+    endless,                                               // 无尽关标记
+    endlessSec: 1500,                                      // 25 分钟上限
+    endlessBossAt: 1200,                                  // 20 分钟处投放终焉 BOSS
+    themeColor:'#e0533d',                                 // 陈塘关·火/龙族红
+  });
+}
+// 无尽关波次：持续的常规加压波（不内置 BOSS）。终焉 BOSS 由 step 在 endlessBossAt 秒处注入，胜利以 endlessSec 限时为准。
+function chenEndlessWaves(){
+  const base = [];
+  for(let k=0;k<20;k++){
+    base.push({ virus:'rhinovirus', count:14+k*2, interval:Math.max(0.9, 1.6-k*0.03), hpMul:1+k*0.15 });
+  }
+  return base;
+}
+
 function chapterWaves(idx){
   const cnt  = b => Math.round(b * (1 + idx*0.26));                  // 小怪数量逐章增加
   const intv = b => Math.max(0.9, +(b - idx*0.16).toFixed(2));      // 出怪间隔逐章收紧
@@ -789,9 +938,21 @@ function keyOf(c,r){ return c+','+r; }
 // 综合暂停 = 主动暂停 || 观察者弹层暂停。保持 G.paused 为真实属性，兼容既有测试。
 function syncPause(){ if(G) G.paused = !!(G.userPaused || G.obsPaused); }
 
-function newGame(idx){
+function setAppOrientation(campaign){
+  const app=document.getElementById('app');
+  if(!app) return;
+  app.classList.toggle('landscape', campaign==='chen');
+  fitApp();
+}
+
+function newGame(idx, campaign){
   idx = (idx|0);
-  LEVEL = LEVELS[idx];
+  campaign = campaign || (LEVEL && LEVEL.campaign) || 'immune';
+  const levels = campaign==='chen' ? LEVELS_CHEN : LEVELS;
+  LEVEL = levels[idx];
+  setAppOrientation(campaign);
+  // 根据当前战役动态调整画布逻辑尺寸（系统战役 7×9，陈塘关 16×9）
+  cv.width = LEVEL.cols*CELL; cv.height = LEVEL.rows*CELL;
   const pathSet = new Set(LEVEL.path.map(p=>keyOf(p[0],p[1])));
   const grid = [];
   for(let r=0;r<LEVEL.rows;r++) grid.push(new Array(LEVEL.cols).fill(null));
@@ -808,8 +969,10 @@ function newGame(idx){
     towers: [], viruses: [],
     energy: BAL.startEnergy, temp: BAL.baseTemp,
     waveIdx: 0, spawnLeft: 0, spawnTimer: 0, waveGapTimer: 0.8,
+    elapsed: 0, bossSpawned: false,                       // 无尽关计时 / 终焉 BOSS 已投放标记
     phase: 'prep', prepTimer: PREP_TIME,
     chapterIdx: idx,
+    campaign: campaign,                                // 当前战役线（immune | chen），结算/解锁用
     shop: [], selected: -1,
     speed: 1, running: false,
     projectiles: [], floaters: [],
@@ -822,14 +985,251 @@ function newGame(idx){
     obsExp: 0,                                         // 当前累计经验（杀怪获得）
     obsExpMax: obsExpFor(1),                           // 本级触发所需经验
     buffs: { atk:1, spd:1, def:1, cool:1, eco:1 },     // 记忆 buff 全局增益（默认无增益）
+    archer: null,                                      // 陈塘关单箭塔（黏膜守卫模式）专属对象
+    archerExp: 0, archerExpMax: archerExpFor(1),        // 陈塘关经验（杀怪攒，满则升级三选一）
+    archerLevel: 1, archerSkills: [],                   // 已习得技能（可叠加）
+    arrows: [],                                          // 飞行中的箭矢
+    aimAngle: -Math.PI/2,                                // 箭塔当前朝向（瞄准用）
+    mouseCell: null,                                      // 当前鼠标所在格（绘制瞄准线）
+    chenWavesCleared: 0,                                  // 已清波次数（普通关胜利判定）
   };
-  for(const p of LEVEL.preplaced) placeTower(p.type, p.col, p.row, true);
-  const bo=document.getElementById('buffOverlay'); if(bo) bo.classList.add('hide');   // 清掉可能残留的 buff 弹层
-  updateObsHUD();
-  rollShop();
+  if(campaign==='chen'){
+    initArcher();   // 初始化单箭塔模式（不摆细胞、不刷商店）
+  } else {
+    for(const p of LEVEL.preplaced) placeTower(p.type, p.col, p.row, true);
+    const bo=document.getElementById('buffOverlay'); if(bo) bo.classList.add('hide');   // 清掉可能残留的 buff 弹层
+    updateObsHUD();
+    rollShop();
+  }
   // 进入准备期：玩家布防，倒计时归零或点「开始战斗」进入第一波
   const sb=document.getElementById('startBattleBtn');
   if(sb){ sb.classList.add('show'); sb.onclick=()=>{ if(G && G.phase==='prep') startWave(0); }; }
+}
+
+// ===================== 陈塘关单箭塔内核（黏膜守卫模式，对标王者·守卫陈塘关）=====================
+// 与系统战役(immune)完全独立：不摆细胞、不用能量/商店，玩家操控单箭塔手动瞄准射击、杀怪攒经验升级、技能三选一 Build。
+function archerExpFor(level){ return Math.round(6 + level*level*2.4); }   // 升级所需经验（随等级平方增长）
+
+// 陈塘关技能池（肉鸽三选一）：可叠加，重复选同技能则升阶
+const ARCHER_SKILLS = [
+  { id:'atk',    name:'强弓',     desc:'箭矢伤害 +25%',            color:'#ff6b6b', apply:s=>s.atkMul*=(s.atkMul?1:1)*1.25 },
+  { id:'spd',    name:'疾射',     desc:'射击速度 +20%',            color:'#fbbf24', apply:s=>s.spdMul*=1.20 },
+  { id:'pierce', name:'穿透',     desc:'箭矢穿透 +1 个目标',       color:'#a78bfa', apply:s=>s.pierce+=1 },
+  { id:'multi',  name:'多重箭',   desc:'每次额外射出 +1 支扇形箭', color:'#34d399', apply:s=>s.multi+=1 },
+  { id:'range',  name:'鹰眼',     desc:'射程 +18%',                color:'#38bdf8', apply:s=>s.rangeMul*=1.18 },
+  { id:'fire',   name:'火箭',     desc:'命中附加灼烧（持续伤害）', color:'#f97316', apply:s=>s.fire+=1 },
+  { id:'frost',  name:'冰箭',     desc:'命中有几率减速目标',       color:'#60a5fa', apply:s=>s.frost+=1 },
+  { id:'wind',   name:'风矢',     desc:'命中击退目标（控场）',     color:'#2dd4bf', apply:s=>s.wind+=1 },
+  { id:'crit',   name:'致命',     desc:'+12% 暴击（2倍伤害）',     color:'#f43f5e', apply:s=>s.crit+=0.12 },
+  { id:'regen',  name:'回春',     desc:'每杀 1 怪回复体温 -0.3°',  color:'#86efac', apply:s=>s.regen+=0.3 },
+];
+function archerBaseStats(){
+  return { atkMul:1, spdMul:1, pierce:0, multi:0, rangeMul:1, fire:0, frost:0, wind:0, crit:0, regen:0, hits:0 };
+}
+// 综合属性（基础 + 已习得技能叠加）
+function archerStats(){
+  const s = archerBaseStats();
+  for(const id of G.archerSkills) { const sk=ARCHER_SKILLS.find(k=>k.id===id); if(sk) sk.apply(s); }
+  return s;
+}
+// 当前攻速（秒/发）
+function archerFireInterval(){ return 0.55 / archerStats().spdMul; }
+// 当前射程（格）：陈塘关横板默认覆盖大半个版面，让玩家专注瞄准而非卡射程
+function archerRange(){ return Math.max(LEVEL.cols, LEVEL.rows) * 1.25 * archerStats().rangeMul; }
+
+function initArcher(){
+  // 单箭塔：横板底部正中间，180° 自由瞄准
+  G.archer = { col: Math.floor(LEVEL.cols/2), row: LEVEL.rows-1, cd:0 };
+  G.archerSkills = [];
+  G.archerLevel = 1;
+  G.archerExp = 0;
+  G.archerExpMax = archerExpFor(1);
+  G.arrows = [];
+  G.aimAngle = -Math.PI/2;  // 默认朝上
+  // 隐藏商店/准备期 UI（陈塘关不用）
+  const sb=document.getElementById('startBattleBtn'); if(sb) sb.classList.remove('show');
+  const shop=document.getElementById('shopRow'); if(shop){ shop.innerHTML=''; shop.style.display='none'; }
+  const reroll=document.getElementById('rerollBtn'); if(reroll) reroll.style.display='none';
+}
+
+// 生成三选一候选（从技能池随机取 3 个，可重复已习得→升阶）
+function archerPickChoices(){
+  const pool=[...ARCHER_SKILLS];
+  const out=[];
+  while(out.length<3 && pool.length){
+    const i=Math.floor(Math.random()*pool.length);
+    out.push(pool.splice(i,1)[0]);
+  }
+  return out;
+}
+function archerApplySkill(id){
+  G.archerSkills.push(id);
+  tip('习得技能：'+(ARCHER_SKILLS.find(k=>k.id===id)||{}).name);
+}
+// 升级流程：经验满 → 暂停 → 弹三选一，选完恢复
+function archerGainExp(n){
+  G.archerExp += n;
+  while(G.archerExp >= G.archerExpMax){
+    G.archerExp -= G.archerExpMax;
+    G.archerLevel++;
+    G.archerExpMax = archerExpFor(G.archerLevel);
+    openArcherChoice();   // 弹三选一（内部会暂停战斗）
+  }
+}
+function openArcherChoice(){
+  G.obsPaused = true; syncPause();
+  const choices = archerPickChoices();
+  const ov=document.getElementById('buffOverlay');
+  if(!ov){ syncPause(); return; }
+  ov.classList.remove('hide');
+  const chips = choices.map((c,i)=>
+    `<div class="skill-chip" data-i="${i}" style="border-color:${c.color}">
+       <div class="sk-name" style="color:${c.color}">${c.name}</div>
+       <div class="sk-desc">${c.desc}</div>
+     </div>`).join('');
+  ov.innerHTML = `<div class="buff-pop">
+    <h3>🏹 箭塔升级 · 三选一</h3>
+    <p class="lvl">当前等级 Lv.${G.archerLevel} · 已习得 ${G.archerSkills.length} 个技能</p>
+    <div class="skill-row">${chips}</div>
+  </div>`;
+  ov.querySelectorAll('.skill-chip').forEach(el=>{
+    el.onclick=()=>{
+      archerApplySkill(choices[+el.dataset.i].id);
+      ov.classList.add('hide');
+      G.obsPaused=false; syncPause();
+    };
+  });
+}
+// 射击：朝当前瞄准方向发射（受攻速冷却限制）。每次发 multi+1 支扇形箭
+function archerFire(){
+  const st=archerStats();
+  if(G.archer.cd>0) return false;
+  G.archer.cd = archerFireInterval();
+  const a=G.aimAngle;
+  const cx=(G.archer.col+0.5), cy=(G.archer.row+0.5);
+  const spread = st.multi>0 ? 0.18 : 0;     // 多重箭扇形夹角
+  const shots = 1 + st.multi;
+  for(let i=0;i<shots;i++){
+    const off = shots>1 ? (i-(shots-1)/2)*spread : 0;
+    const ang = a + off;
+    G.arrows.push({
+      x:cx, y:cy, vx:Math.cos(ang)*9, vy:Math.sin(ang)*9,
+      dmg: 14 * st.atkMul * (1 + G.archerLevel*0.06),
+      pierce: st.pierce, hitSet:[],
+      fire:st.fire, frost:st.frost, wind:st.wind, crit:st.crit,
+      life: archerRange()/9 + 0.25, color:'#ffe08a',
+    });
+  }
+  return true;
+}
+// 箭塔移动（陈塘关允许玩家拖动箭塔到任意非路径绿格）
+function archerMoveTo(c,r){
+  if(c<1||c>LEVEL.cols-2||r<1||r>LEVEL.rows-2) return false;
+  if(G.pathSet.has(keyOf(c,r))) return false;
+  G.archer.col=c; G.archer.row=r;
+  return true;
+}
+
+// 陈塘关战斗主循环（独立于系统战役的塔防逻辑）
+function archerStep(dt){
+  // 准备期：仅倒计时，不出怪（提示“瞄准射击”），到点开战
+  if(G.phase==='prep'){
+    G.prepTimer -= dt;
+    if(G.prepTimer<=0){ G.phase='wave'; startWave(0); }
+    updateHUD();
+    return;
+  }
+  if(G.phase==='win'||G.phase==='lose'){ updateHUD(); return; }
+  const isEndless = (LEVEL && LEVEL.endless);
+  if(isEndless) G.elapsed += dt;
+  // 无尽关限时胜利（独立最高优先）
+  if(isEndless && G.elapsed >= LEVEL.endlessSec){ G.phase='win'; endGame(true); return; }
+  // 无尽关 BOSS 注入（在限时胜利之后，避免推开胜利帧）
+  if(isEndless && !G.bossSpawned && G.elapsed >= LEVEL.endlessBossAt){
+    G.viruses.length=0; spawnVirus('boss2', 30);
+    G.bossSpawned=true;
+    addFloater((1+LEVEL.cols)/2, 0.5, '⚠ 龙族终焉·敖闰降临！', '#ff5252');
+  }
+  // 出怪
+  const w=LEVEL.waves[G.waveIdx];
+  if(G.spawnLeft>0){
+    G.spawnTimer -= dt;
+    if(G.spawnTimer<=0){ spawnVirus(w.virus, w.hpMul); G.spawnLeft--; G.spawnTimer=w.interval; }
+  } else if(G.viruses.length===0){
+    G.chenWavesCleared++;
+    if(isEndless){
+      // 无尽关：未到时间则循环复用末波维持高压
+      if(G.elapsed < LEVEL.endlessSec) startWave(LEVEL.waves.length-1);
+    } else {
+      // 普通关：清完全部波次即胜，否则推进下一波
+      if(G.waveIdx>=LEVEL.waves.length-1){ G.phase='win'; endGame(true); return; }
+      startWave(G.waveIdx+1);
+    }
+  }
+  if(G.phase==='gap'){
+    G.waveGapTimer -= dt;
+    if(G.waveGapTimer<=0) startWave(G.waveIdx+1);
+  }
+  // 箭塔射击（自动朝瞄准方向，受攻速冷却）
+  G.archer.cd -= dt;
+  archerFire();
+  // 箭矢飞行 / 命中
+  for(const ar of G.arrows){
+    ar.x += ar.vx*dt; ar.y += ar.vy*dt; ar.life -= dt;
+    const px=ar.x*CELL, py=ar.y*CELL;
+    // 命中病毒
+    for(const v of G.viruses){
+      if(ar.hitSet.includes(v)) continue;
+      const vp=virusPos(v), vx=vp.x*CELL, vy=vp.y*CELL;
+      if(Math.hypot(px-vx,py-vy) < (v.type&&VIRUSES[v.type].boss?20:12)){
+        ar.hitSet.push(v);
+        let dmg = ar.dmg * (ar.crit>0 && Math.random()<ar.crit ? 2 : 1);
+        v.hp -= dmg;
+        // 元素效果
+        if(ar.fire>0) v.burn = Math.max(v.burn||0, 2.5);     // 灼烧：持续伤害计时
+        if(ar.frost>0 && Math.random()<0.35) v.slowT = Math.max(v.slowT||0, 0.9);  // 减速
+        if(ar.wind>0) v.knock = Math.max(v.knock||0, 0.6);   // 击退（控场）
+        if(v.hp<=0 && !v._killed){ v._killed=true; archerGainExp(VIRUSES[v.type].boss?8:1); }
+        if(ar.pierce<=0){ ar.life=0; break; } else ar.pierce--;
+      }
+    }
+    // 出界 / 超时则销毁
+    if(ar.x<0||ar.x>LEVEL.cols||ar.y<0||ar.y>LEVEL.rows) ar.life=0;
+  }
+  G.arrows = G.arrows.filter(a=>a.life>0);
+  // 病毒移动 + 灼烧/击退/漏怪
+  for(const v of G.viruses){
+    if(v.burn>0){ v.burn-=dt; v.hp -= 4*dt; if(v.hp<=0 && !v._killed){ v._killed=true; archerGainExp(VIRUSES[v.type].boss?8:1); } }
+    let sp=v.speed;
+    if(v.slowT>0){ v.slowT-=dt; sp*=0.6; }
+    if(v.knock>0){ v.knock-=dt; v.prog -= 0.35*dt; if(v.prog<0) v.prog=0; } // 击退：进度短暂回退
+    v.prog += sp*dt;
+    if(v.prog >= LEVEL.path.length-1){ v.leaked=true; }
+  }
+  const leaked=G.viruses.filter(v=>v.leaked);
+  if(leaked.length){
+    for(const v of leaked){
+      const add=(VIRUSES[v.type].boss?1.5:BAL.tempPerLeak);
+      G.temp += add;
+      addFloater(LEVEL.exit.col+0.5, LEVEL.exit.row+0.5, '+'+add.toFixed(1)+'°', '#ff5c5c');
+    }
+    G.viruses=G.viruses.filter(v=>!v.leaked);
+  }
+  // 回春：清除已死病毒并结算（经验已按击杀发，这里只清场+回温）
+  G.viruses = G.viruses.filter(v=>{
+    if(v.hp<=0 && !v._counted){
+      v._counted=true;
+      const st=archerStats();
+      if(st.regen>0){ G.temp=Math.max(BAL.baseTemp, G.temp - st.regen); }
+      addFloater(virusPos(v).x, virusPos(v).y, '✔', '#7dd3fc');
+      return false;
+    }
+    return true;
+  });
+  // 体温自然下降 + 失败判定
+  G.temp = Math.max(BAL.baseTemp, G.temp - BAL.coolPerSec*dt);
+  if(G.temp >= BAL.failTemp){ G.temp=BAL.failTemp; G.phase='lose'; endGame(false); return; }
+  updateHUD();
 }
 
 // 商店卡表示：字符串('neutrophil')=tier1；{type,tier}对象=tier>=2（被挤回商店的升级塔）；格子卡{...,cells}
@@ -1119,6 +1519,8 @@ let _lastDt=0, _stepCount=0;
 function step(dt){
   _lastDt = dt;
   _stepCount++;
+  // 陈塘关单箭塔内核：走独立战斗循环
+  if(G.campaign==='chen'){ archerStep(dt); return; }
   // 准备期：仅倒计时，不出怪不结算
   if(G.phase==='prep'){
     G.prepTimer -= dt;
@@ -1126,8 +1528,20 @@ function step(dt){
     updateHUD();
     return;
   }
-  // 出怪
+  // ---------- 出怪阶段 ----------
   if(G.phase==='wave'){
+    const isEndless = (LEVEL && LEVEL.endless);
+    // 无尽关：累计经过时间
+    if(isEndless) G.elapsed += dt;
+    // 无尽关限时胜利：撑满 endlessSec 即胜，优先级最高（独立于场上是否有残怪/BOSS，对标王者撑到时间）
+    if(isEndless && G.elapsed >= LEVEL.endlessSec){ G.phase='win'; endGame(true); return; }
+    // 无尽关 BOSS 注入：到 endlessBossAt 秒且尚未投放 → 清场后强行投放终焉 BOSS（放在限时胜利判定之后，避免注入的 boss 推开胜利帧）
+    if(isEndless && !G.bossSpawned && G.elapsed >= LEVEL.endlessBossAt){
+      G.viruses.length = 0;                 // 清掉残留小怪，避免混战影响观感
+      spawnVirus('boss2', 30);        // 终焉 BOSS（对标敖闰，hpMul 30）
+      G.bossSpawned = true;
+      addFloater((1+LEVEL.cols)/2, 0.5, '⚠ 龙族终焉·敖闰降临！', '#ff5252');
+    }
     const w=LEVEL.waves[G.waveIdx];
     if(G.spawnLeft>0){
       G.spawnTimer-=dt;
@@ -1142,8 +1556,14 @@ function step(dt){
         addFloater((1+LEVEL.cols)/2, 0.5, '红细胞产能 +'+gain+'⚡', '#ffd24a');
         tip(redCells.length+' 个红细胞结算能量 +'+gain);
       }
-      if(G.waveIdx>=LEVEL.waves.length-1){ G.phase='win'; endGame(true); return; }
-      G.phase='gap'; G.waveGapTimer=BAL.waveGap;
+      // —— 非无尽关：正常末波通关判定 ——
+      if(!isEndless){
+        if(G.waveIdx>=LEVEL.waves.length-1){ G.phase='win'; endGame(true); return; }
+        G.phase='gap'; G.waveGapTimer=BAL.waveGap;
+        return;
+      }
+      // —— 无尽关：未到时间则循环复用末波维持高压（限时胜利已在上文优先处理）——
+      startWave(LEVEL.waves.length-1);
     }
   } else if(G.phase==='gap'){
     G.waveGapTimer-=dt;
@@ -1240,28 +1660,36 @@ function render(){
 
   // 背景已由 #stage CSS 铺 背景.png（黏膜/肠道场景），canvas 透明叠加，仅画格子/路径/塔/病毒
 
-  // 格子
-  for(let r=0;r<LEVEL.rows;r++)for(let c=0;c<LEVEL.cols;c++){
-    const x=c*CELL, y=r*CELL, cell=G.grid[r][c];
-    const onPath = G.pathSet.has(keyOf(c,r));
-    if(onPath){
-      // 病毒路径：暖棕色（像木板）
-      ctx.fillStyle='#5a3d20'; ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
-      ctx.strokeStyle='#8b6914'; ctx.lineWidth=1.5; ctx.strokeRect(x+2,y+2,CELL-4,CELL-4);
-    } else if(cell==='locked'){
-      // 锁定暗格：深蓝 + 粗虚线框 + 「+」号
-      ctx.fillStyle='#223048'; ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
-      ctx.strokeStyle='#4a6090'; ctx.lineWidth=1.5; ctx.setLineDash([4,4]); ctx.strokeRect(x+2,y+2,CELL-4,CELL-4); ctx.setLineDash([]);
-      ctx.strokeStyle='#7090c0'; ctx.lineWidth=2.5;
-      ctx.beginPath();
-      ctx.moveTo(x+CELL/2-8,y+CELL/2); ctx.lineTo(x+CELL/2+8,y+CELL/2);
-      ctx.moveTo(x+CELL/2,y+CELL/2-8); ctx.lineTo(x+CELL/2,y+CELL/2+8); ctx.stroke();
-    } else {
-      const inner = c>=1&&c<=LEVEL.cols-2&&r>=1&&r<=LEVEL.rows-2;
-      // 已开通绿格（明显可见的绿色）
-      ctx.fillStyle = inner ? '#1a4030' : '#162030';
-      ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
-      if(inner){ ctx.strokeStyle='#30a060'; ctx.lineWidth=2; ctx.strokeRect(x+1.5,y+1.5,CELL-3,CELL-3); }
+  // 格子：系统战役画完整网格；陈塘关横板只画路径（其余交给 CSS 背景）
+  if(G.campaign==='chen'){
+    for(const [c,r] of LEVEL.path){
+      const x=c*CELL, y=r*CELL;
+      ctx.fillStyle='#6b4c2a'; ctx.fillRect(x+1,y+1,CELL-2,CELL-2);    // 横板路径更宽
+      ctx.strokeStyle='#b08d55'; ctx.lineWidth=2; ctx.strokeRect(x+2,y+2,CELL-4,CELL-4);
+    }
+  } else {
+    for(let r=0;r<LEVEL.rows;r++)for(let c=0;c<LEVEL.cols;c++){
+      const x=c*CELL, y=r*CELL, cell=G.grid[r][c];
+      const onPath = G.pathSet.has(keyOf(c,r));
+      if(onPath){
+        // 病毒路径：暖棕色（像木板）
+        ctx.fillStyle='#5a3d20'; ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
+        ctx.strokeStyle='#8b6914'; ctx.lineWidth=1.5; ctx.strokeRect(x+2,y+2,CELL-4,CELL-4);
+      } else if(cell==='locked'){
+        // 锁定暗格：深蓝 + 粗虚线框 + 「+」号
+        ctx.fillStyle='#223048'; ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
+        ctx.strokeStyle='#4a6090'; ctx.lineWidth=1.5; ctx.setLineDash([4,4]); ctx.strokeRect(x+2,y+2,CELL-4,CELL-4); ctx.setLineDash([]);
+        ctx.strokeStyle='#7090c0'; ctx.lineWidth=2.5;
+        ctx.beginPath();
+        ctx.moveTo(x+CELL/2-8,y+CELL/2); ctx.lineTo(x+CELL/2+8,y+CELL/2);
+        ctx.moveTo(x+CELL/2,y+CELL/2-8); ctx.lineTo(x+CELL/2,y+CELL/2+8); ctx.stroke();
+      } else {
+        const inner = c>=1&&c<=LEVEL.cols-2&&r>=1&&r<=LEVEL.rows-2;
+        // 已开通绿格（明显可见的绿色）
+        ctx.fillStyle = inner ? '#1a4030' : '#162030';
+        ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
+        if(inner){ ctx.strokeStyle='#30a060'; ctx.lineWidth=2; ctx.strokeRect(x+1.5,y+1.5,CELL-3,CELL-3); }
+      }
     }
   }
   // 入口/出口标记
@@ -1309,9 +1737,14 @@ function render(){
     }
   }
 
-  // 塔（伤害统计：高亮输出最高的塔）
-  const maxDmg = G.showStats ? G.towers.reduce((m,t)=>Math.max(m, t.dmg||0),0) : 0;
-  for(const t of G.towers) drawTower(t, maxDmg);
+  // 陈塘关：画单箭塔 + 瞄准线 + 箭矢（不走细胞塔绘制）
+  if(G.campaign==='chen' && G.archer){
+    drawArcher();
+  } else {
+    // 塔（伤害统计：高亮输出最高的塔）
+    const maxDmg = G.showStats ? G.towers.reduce((m,t)=>Math.max(m, t.dmg||0),0) : 0;
+    for(const t of G.towers) drawTower(t, maxDmg);
+  }
   updateStats();
   // 拖动预览
   if(drag && drag.moved && drag.hoverC!=null){
@@ -1487,14 +1920,62 @@ function lighten(hex,amt){
 }
 
 // ---------- HUD ----------
-// 轮次标签：小怪轮显示 1~8/8，BOSS 事件显示 BOSS
+// 轮次标签：小怪轮显示 1~8/8，BOSS 事件显示 BOSS，无尽关显示已坚守时长
 function roundLabel(){
+  const isEndless = (LEVEL && LEVEL.endless);
+  if(isEndless){
+    const sec = Math.min(G.elapsed, LEVEL.endlessSec);
+    const mm = String(Math.floor(sec/60)).padStart(2,'0');
+    const ss = String(Math.floor(sec%60)).padStart(2,'0');
+    const totM = String(Math.floor(LEVEL.endlessSec/60)).padStart(2,'0');
+    return '⏱ '+mm+':'+ss+'/'+totM+':00';
+  }
   const i=G.waveIdx, w=LEVEL.waves[i];
   if(w && w.isBoss) return 'BOSS';
   return (i>=5 ? i : i+1)+'/'+LEVEL.roundTotal;
 }
 function updateHUD(){
   document.getElementById('chapterVal').textContent = LEVEL.chapterName;
+  if(G.campaign==='chen'){
+    // 陈塘关 → 经验条 + 箭塔等级 + 技能数（复用 energy 行展示，reroll 按钮隐藏）
+    const expPct = Math.max(0,Math.min(100, G.archerExp/G.archerExpMax*100));
+    const el=document.getElementById('energyVal');
+    if(el) el.innerHTML = `🏹 Lv.${G.archerLevel} · 技能 ${G.archerSkills.length} · <span style="color:#ffd24a">EXP ${Math.floor(expPct)}%</span>`;
+    const ef=document.getElementById('energyFill');
+    if(ef) ef.style.width = expPct+'%';
+    if(G.phase==='prep'){ document.getElementById('waveVal').textContent = Math.ceil(G.prepTimer)+'s 后开战'; }
+    else { document.getElementById('waveVal').textContent = roundLabel(); }
+    const t=G.temp; document.getElementById('tempVal').textContent = t.toFixed(1)+'°';
+    const pct = (t-BAL.baseTemp)/(BAL.failTemp-BAL.baseTemp)*100;
+    document.getElementById('tempFill').style.width = Math.max(0,Math.min(100,pct))+'%';
+    const fever=document.getElementById('fever');
+    const glow=Math.max(0,Math.min(1,(t-38)/(BAL.failTemp-38)));
+    fever.style.opacity=glow;
+    fever.style.boxShadow=`inset 0 0 ${40*glow}px ${18*glow}px rgba(239,68,68,${0.55*glow})`;
+    // 横屏面板信息
+    const leftLv=document.getElementById('leftLv'); if(leftLv) leftLv.textContent='LV '+G.archerLevel;
+    const leftExp=document.getElementById('leftExp'); if(leftExp) leftExp.textContent=Math.floor(G.archerExp)+'/'+G.archerExpMax;
+    const leftFill=document.getElementById('leftExpFill'); if(leftFill) leftFill.style.width=expPct+'%';
+    const leftSkills=document.getElementById('leftSkills');
+    if(leftSkills){
+      if(G.archerSkills.length===0) leftSkills.innerHTML='<div class="lp-skill">暂无技能</div>';
+      else leftSkills.innerHTML=G.archerSkills.map(id=>{
+        const sk=ARCHER_SKILLS.find(k=>k.id===id);
+        return sk ? `<div class="lp-skill" style="border-color:${sk.color};color:${sk.color}">${sk.name}</div>` : '';
+      }).join('');
+    }
+    const ctTitle=document.querySelector ? document.querySelector('.ct-title') : null;
+    if(ctTitle) ctTitle.textContent = (LEVEL && LEVEL.endless) ? '无尽关卡' : LEVEL.chapterName;
+    const ctTimer=document.getElementById('ctTimer');
+    if(ctTimer){
+      const sec = LEVEL.endless ? Math.min(G.elapsed, LEVEL.endlessSec) : G.elapsed;
+      const mm=String(Math.floor(sec/60)).padStart(2,'0');
+      const ss=String(Math.floor(sec%60)).padStart(2,'0');
+      ctTimer.textContent = mm+':'+ss;
+    }
+    updateObsHUD();
+    return;
+  }
   if(G.phase==='prep'){
     document.getElementById('waveVal').textContent = Math.ceil(G.prepTimer)+'s';
   } else {
@@ -1510,6 +1991,50 @@ function updateHUD(){
   fever.style.boxShadow=`inset 0 0 ${40*glow}px ${18*glow}px rgba(239,68,68,${0.55*glow})`;
   document.getElementById('rerollBtn').classList.toggle('disabled', G.energy<15);
   updateObsHUD();
+}
+
+// 陈塘关：绘制单箭塔（城楼箭塔造型）、瞄准线、飞行箭矢
+function drawArcher(){
+  const a=G.archer;
+  const cx=(a.col+0.5)*CELL, cy=(a.row+0.5)*CELL;
+  const range=archerRange()*CELL;
+  // 射程圈（淡红，与免疫绿区分）
+  ctx.fillStyle='rgba(224,83,61,.06)'; ctx.strokeStyle='rgba(224,83,61,.35)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(cx,cy,range,0,7); ctx.fill(); ctx.stroke();
+  // 瞄准线
+  ctx.strokeStyle='rgba(255,224,138,.55)'; ctx.lineWidth=2; ctx.setLineDash([6,5]);
+  ctx.beginPath(); ctx.moveTo(cx,cy);
+  ctx.lineTo(cx+Math.cos(G.aimAngle)*range, cy+Math.sin(G.aimAngle)*range); ctx.stroke(); ctx.setLineDash([]);
+  // 箭塔基座（城垛）
+  ctx.fillStyle='#7a3b2e'; roundRect(cx-CELL*0.34, cy-CELL*0.34, CELL*0.68, CELL*0.68, 6); ctx.fill();
+  ctx.strokeStyle='#e0533d'; ctx.lineWidth=2.5; ctx.stroke();
+  // 塔身（石砖）
+  const bx=cx-CELL*0.22, by=cy-CELL*0.22, bs=CELL*0.44;
+  const g=ctx.createRadialGradient(bx+bs*0.3,by+bs*0.3,bs*0.15, cx,cy,bs*0.7);
+  g.addColorStop(0,'#d98c5f'); g.addColorStop(1,'#9c4a30');
+  ctx.fillStyle=g; roundRect(bx,by,bs,bs,4); ctx.fill();
+  // 弓臂（朝瞄准方向）
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(G.aimAngle);
+  ctx.strokeStyle='#ffe08a'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.arc(0,0,CELL*0.30,-1.1,1.1); ctx.stroke();
+  // 箭（当前指向）
+  ctx.strokeStyle='#fff4c2'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(CELL*0.42,0); ctx.stroke();
+  ctx.restore();
+  // 等级角标
+  ctx.fillStyle='rgba(0,0,0,.55)'; roundRect(cx+CELL*0.22,cy-CELL*0.36,CELL*0.28,CELL*0.24,4); ctx.fill();
+  ctx.fillStyle='#ffd24a'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('L'+G.archerLevel, cx+CELL*0.36, cy-CELL*0.24);
+  // 箭矢
+  for(const ar of G.arrows){
+    const x=ar.x*CELL, y=ar.y*CELL;
+    const ang=Math.atan2(ar.vy,ar.vx);
+    ctx.save(); ctx.translate(x,y); ctx.rotate(ang);
+    ctx.strokeStyle=ar.color; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.moveTo(-7,0); ctx.lineTo(7,0); ctx.stroke();
+    ctx.fillStyle=ar.color; ctx.beginPath(); ctx.moveTo(7,0); ctx.lineTo(2,-3); ctx.lineTo(2,3); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
 }
 
 // ---------- 商店渲染（含格子卡形状预览）----------
@@ -1591,15 +2116,34 @@ function cvXY(e){
   const scaleX = cv.width / rect.width, scaleY = cv.height / rect.height;
   return { c:Math.floor(sx*scaleX/CELL), r:Math.floor(sy*scaleY/CELL) };
 }
-cv.addEventListener('mousemove',e=>{ hoverCell=cvXY(e); });
+cv.addEventListener('mousemove',e=>{
+  hoverCell=cvXY(e);
+  if(G && G.campaign==='chen' && G.archer){
+    // 陈塘关：用像素坐标计算瞄准角，限制在 180° 上半平面（底部正中的箭塔只能朝上射）
+    const rect=cv.getBoundingClientRect();
+    const sx=(e.touches?e.touches[0].clientX:e.clientX)-rect.left;
+    const sy=(e.touches?e.touches[0].clientY:e.clientY)-rect.top;
+    const scaleX=cv.width/rect.width, scaleY=cv.height/rect.height;
+    const px=sx*scaleX, py=sy*scaleY;
+    G.mousePixel={x:px,y:py};
+    const ax=(G.archer.col+0.5)*CELL, ay=(G.archer.row+0.5)*CELL;
+    let ang=Math.atan2(py-ay, px-ax);
+    if(ang>0) ang=-ang;               // 鼠标在下方时镜像到上半平面
+    G.aimAngle=ang;
+  }
+});
 cv.addEventListener('mouseleave',()=>{ hoverCell=null; if(drag){ drag.hoverC=null; drag.hoverR=null; } });
 
 // 在已有塔上按下 → 进入潜在拖动（移动已有塔）
 cv.addEventListener('pointerdown',e=>{
   if(!G||!G.running) return;
   const {c,r}=cvXY(e); if(!grid_in(c,r)) return;
+  // 陈塘关单箭塔模式：底部固定箭塔，点击只是手动补一发射击
+  if(G.campaign==='chen' && G.archer){
+    archerFire();
+    return;
+  }
   // 即使已选商店卡，也允许在塔上按下并拖动，便于“选卡→拖动场上塔移动”。
-  // 如果未拖动，pointerup 会根据 G.selected 状态交给 handleTap 或显示范围。
   const cell=G.grid[r][c];
   if(cell && typeof cell==='object'){
     drag={ kind:'tower', tower:cell, moved:false, sx:e.clientX, sy:e.clientY, hoverC:c, hoverR:r };
@@ -1925,6 +2469,22 @@ document.getElementById('statBtn').onclick=()=>{
 // 帮助 / 玩法说明
 document.getElementById('helpBtn').onclick=()=>{ document.getElementById('helpOverlay').classList.remove('hide'); };
 document.getElementById('helpClose').onclick=()=>{ document.getElementById('helpOverlay').classList.add('hide'); };
+// 横屏陈塘关工具栏：复用暂停/倍速/帮助逻辑
+const chenSpeedBtn=document.getElementById('chenSpeedBtn');
+if(chenSpeedBtn) chenSpeedBtn.onclick=()=>{
+  G.speed = G.speed===1?2:1;
+  chenSpeedBtn.textContent = G.speed===2?'⏩':'▶';
+};
+const chenPauseBtn=document.getElementById('chenPauseBtn');
+if(chenPauseBtn) chenPauseBtn.onclick=()=>{
+  if(!G) return;
+  G.userPaused = !G.userPaused; syncPause();
+  chenPauseBtn.textContent = G.userPaused ? '▶' : '⏸';
+  chenPauseBtn.classList.toggle('warn', G.userPaused);
+  chenPauseBtn.title = G.userPaused ? '继续' : '暂停';
+};
+const chenHelpBtn=document.getElementById('chenHelpBtn');
+if(chenHelpBtn) chenHelpBtn.onclick=()=>{ document.getElementById('helpOverlay').classList.remove('hide'); };
 // 「合成」按钮：达条件时浮现，点击把当前所有可合成组合一次性合掉
 document.getElementById('mergeBtn').onclick=()=>{ mergeAll(); };
 // 每帧刷新按钮可见性 + 数量（达到条件立刻冒出）
@@ -1984,7 +2544,7 @@ function loop(ts){
     try { step(dt); } catch(e) {
       console.error('[step] CRASH @ t='+_gameTime.toFixed(2)+'s:', e.message, e.stack);
       G.running = false;
-      alert('游戏逻辑报错(已暂停):\n'+e.message+'\n位置: step()');
+      showToast('游戏逻辑报错(已暂停): '+e.message, 'warn', 4000);
     }
   }
 }
@@ -1996,34 +2556,63 @@ function endGame(win){
   ov.classList.remove('hide');
   const towerCount=G.towers.length;
   const idx = G.chapterIdx;
+  const campaign = (LEVEL && LEVEL.campaign) || 'immune';
+  const levels = campaign==='chen' ? LEVELS_CHEN : LEVELS;
+  const cname = (LEVEL && LEVEL.chapterName) || ('第 '+(idx+1)+' 章');
   if(win){
-    saveUnlocked(idx+1);                 // 结算时即解锁下一章（持久化）
-    const last = idx >= LEVELS.length-1;
-    ov.innerHTML = `<h1>🎉 ${LEVEL.chapterName} 通过！</h1>
-      <p>8 轮小怪 + 1 个 BOSS 全部拦截。<br>
+    saveUnlocked(idx+1, campaign);                 // 结算时即解锁下一章（持久化）
+    const last = idx >= levels.length-1;
+    const isEndless = (LEVEL && LEVEL.endless);
+    ov.innerHTML = `<h1>🎉 ${cname} 通过！</h1>
+      <p>${isEndless ? '陈塘关守住了！坚守到最后一刻。<br>' : '8 轮小怪 + 1 个 BOSS 全部拦截。<br>'}
       峰值体温 <span class="em">${peakTemp.toFixed(1)}°</span> · 摆放 <span class="em">${towerCount}</span> 个细胞。</p>
       <button class="btn big" id="okBtn">${last?'全部通关 · 查看战役':'确定'}</button>`;
-    document.getElementById('okBtn').onclick = showCampaign;
+    document.getElementById('okBtn').onclick = ()=>showCampaign(campaign);
   } else {
-    ov.innerHTML = `<h1>🤒 发烧失败</h1><p>体温飙到 <span class="em">42°</span>，病毒攻陷身体。<br>漏怪太多——把塔往<span class="em">出口(右上)侧</span>多摆，或多摆红细胞攒能量堆更多塔。</p>
+    ov.innerHTML = `<h1>🤒 防线失守</h1><p>体温飙到 <span class="em">42°</span>，病毒攻陷了${campaign==='chen'?'陈塘关':'身体'}。<br>漏怪太多——把塔往<span class="em">出口(右上)侧</span>多摆，或多摆红细胞攒能量堆更多塔。</p>
       <button class="btn big" id="againBtn">重玩本章</button>
       <button class="btn" id="campBtn">返回战役</button>`;
-    document.getElementById('againBtn').onclick = ()=>{ tryEnterChapter(idx); };
-    document.getElementById('campBtn').onclick = showCampaign;
+    document.getElementById('againBtn').onclick = ()=>{ tryEnterChapter(idx, campaign); };
+    document.getElementById('campBtn').onclick = ()=>showCampaign(campaign);
   }
 }
 let peakTemp = BAL.baseTemp;
 
+// 全局提示（替代浏览器 alert，避免在微信小游戏/部分浏览器被屏蔽时无反馈）
+let _toastTimer = null;
+function showToast(msg, type, dur){
+  type = type || 'warn';
+  dur  = (dur|0) || 2200;
+  const t = document.getElementById('toast');
+  if(!t){
+    try{ if(typeof alert==='function') alert(msg); }catch(e){}
+    return;
+  }
+  t.textContent = msg;
+  t.className = 'show ' + (type==='info' ? 'info' : '');
+  if(_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(()=>{ t.className = ''; }, dur);
+}
+
 // ---------- 战役进度持久化（localStorage，失败静默降级）----------
 const SAVE_KEY = 'immuno_td_progress_v1';
 function loadProgress(){
-  try { const r = JSON.parse(localStorage.getItem(SAVE_KEY)); if(r && typeof r.unlocked==='number') return r; } catch(e){}
-  return { unlocked: 0 };                 // 默认仅第 1 章解锁
+  try {
+    const r = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if(r && typeof r==='object'){
+      // 兼容旧格式（单数字 unlocked）；新格式为 { immune, chen }
+      const immune = (typeof r.immune==='number') ? r.immune : (typeof r.unlocked==='number' ? r.unlocked : 0);
+      const chen   = (typeof r.chen==='number') ? r.chen : 0;
+      return { immune, chen };
+    }
+  } catch(e){}
+  return { immune:0, chen:0 };            // 默认两条战役线均仅第 1 关解锁
 }
-function saveUnlocked(idx){
+function saveUnlocked(idx, campaign){
+  campaign = campaign || (LEVEL && LEVEL.campaign) || 'immune';
   const p = loadProgress();
-  if(idx > p.unlocked){
-    p.unlocked = idx;
+  if(idx > p[campaign]){
+    p[campaign] = idx;
     try{ localStorage.setItem(SAVE_KEY, JSON.stringify(p)); }catch(e){}
     progress = p;                         // 同步模块级，确保 showCampaign 读到最新
   }
@@ -2096,40 +2685,56 @@ function updateStaminaHUD(){
 }
 
 // ---------- 系统战役页面（选关地图）----------
-function showCampaign(){
+function showCampaign(campaign){
   G && (G.running=false);
+  campaign = campaign || 'immune';
+  setAppOrientation('immune');   // 选关地图统一竖屏
+  const levels = campaign==='chen' ? LEVELS_CHEN : LEVELS;
+  const pUnlocked = (campaign==='chen' ? progress.chen : progress.immune);
+  const theme = campaign==='chen' ? '#e0533d' : '#0e7c66';
+  const themeBorder = campaign==='chen' ? '#ff8a65' : '#19c39e';
+  const title = campaign==='chen' ? '🔥 守卫陈塘关' : '🛡️ 系统战役';
+  const tip   = campaign==='chen'
+    ? '共 6 关线性推进 + 第 7 关「无尽」冲榜。每关消耗 <b>'+STAMINA_COST+' 体力</b>，当前剩余 <b class="em">'+stamina.stamina+'/'+STAMINA_MAX+'</b>。'
+    : '选择章节开始防御。每章消耗 <b>'+STAMINA_COST+' 体力</b>，当前剩余 <b class="em">'+stamina.stamina+'/'+STAMINA_MAX+'</b>。通关解锁下一章。';
   const home=document.getElementById('homeOverlay');
   if(home) home.classList.add('hide');
   const ov=document.getElementById('overlay');
   ov.classList.remove('hide');
   let cards='';
-  for(let i=0;i<LEVELS.length;i++){
-    const unlocked = i <= progress.unlocked;
-    const cleared  = i <  progress.unlocked;   // 已通关（下一章已解锁）
-    const sub = cleared ? '✓ 已通关' : (unlocked ? '可挑战' : '🔒 未解锁');
-    cards += `<div class="ch-card${unlocked?'':' locked'}" data-i="${i}" style="width:120px;padding:14px;border-radius:12px;background:${unlocked?'#0e7c66':'#2a2a32'};color:#fff;border:2px solid ${unlocked?'#19c39e':'#444'};${unlocked?'':'opacity:.5;filter:grayscale(1);cursor:not-allowed;'}">
-      <div style="font-size:18px;font-weight:700">第 ${i+1} 章</div>
-      <div style="font-size:13px;opacity:.85;margin-top:6px">${sub}</div>
+  for(let i=0;i<levels.length;i++){
+    const lvl = levels[i];
+    const unlocked = i <= pUnlocked;
+    const cleared  = i <  pUnlocked;   // 已通关（下一关已解锁）
+    const sub = lvl.endless ? '♾ 无尽冲榜' : (cleared ? '✓ 已通关' : (unlocked ? '⚔ 挑战(-'+STAMINA_COST+'体)' : '🔒 未解锁'));
+    cards += `<div class="ch-card${unlocked?'':' locked'}" data-i="${i}" data-campaign="${campaign}" style="width:132px;padding:14px;border-radius:14px;background:${unlocked?theme:'#2a2a32'};color:#fff;border:2px solid ${unlocked?themeBorder:'#444'};${unlocked?'':'opacity:.5;filter:grayscale(1);cursor:not-allowed;'}">
+      <div style="font-size:16px;font-weight:700">${lvl.chapterName}</div>
+      <div style="font-size:13px;opacity:.85;margin-top:8px;line-height:1.4">${sub}</div>
     </div>`;
   }
-  ov.innerHTML = `<h1>🛡️ 系统战役</h1>
-    <p>选择章节开始防御。<b>通关一章即解锁下一章</b>，可随时回看 / 重打已解锁章节。</p>
+  ov.innerHTML = `<h1>${title}</h1>
+    <p>${tip}</p>
     <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:18px 0">${cards}</div>
     <button class="btn" id="backHomeBtn">返回战斗页</button>
     <button class="btn" id="resetBtn">重置进度</button>`;
   ov.querySelectorAll('.ch-card:not(.locked)').forEach(el=>{
     el.style.cursor='pointer';
-    el.onclick=()=>{ tryEnterChapter(+el.dataset.i); };
+    el.onclick=()=>{ tryEnterChapter(+el.dataset.i, campaign); };
   });
   const bb=document.getElementById('backHomeBtn');
   if(bb) bb.onclick=showBattleHome;
   const rb=document.getElementById('resetBtn');
-  if(rb) rb.onclick=()=>{ try{localStorage.removeItem(SAVE_KEY);}catch(e){} progress={unlocked:0}; showCampaign(); };
+  if(rb) rb.onclick=()=>{
+    try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+    progress={ immune:0, chen:0 };
+    showCampaign(campaign);
+  };
 }
 
 // ---------- 战斗页 HOME（默认入口）----------
 function showBattleHome(){
   G && (G.running=false);
+  setAppOrientation('immune');
   const ov=document.getElementById('overlay');
   if(ov) ov.classList.add('hide');
   const home=document.getElementById('homeOverlay');
@@ -2140,16 +2745,16 @@ function showBattleHome(){
 }
 function bindHomeEvents(){
   const campaignCard=document.getElementById('campaignCard');
-  if(campaignCard) campaignCard.onclick=()=>showCampaign();
+  if(campaignCard) campaignCard.onclick=()=>showCampaign('immune');
   const guardCard=document.getElementById('guardCard');
-  if(guardCard) guardCard.onclick=()=>alert('🛡️ 黏膜守卫模式正在开发，敬请期待！');
+  if(guardCard) guardCard.onclick=()=>showCampaign('chen');   // 黏膜守卫 = 守卫陈塘关战役入口（仅换名）
   if(!document.querySelectorAll) return;
   document.querySelectorAll('.homeNav .navTab').forEach(tab=>{
     tab.onclick=()=>{
       const key=tab.dataset.tab;
       if(key==='battle'){ showBattleHome(); return; }
       const names={shop:'商城',codex:'图鉴',pool:'卡池'};
-      alert('🚧 '+ (names[key]||key) +' 功能正在开发，敬请期待！');
+      showToast('🚧 '+ (names[key]||key) +' 功能正在开发，敬请期待！', 'info');
     };
   });
 }
@@ -2163,15 +2768,26 @@ function startRun(){
   G.running = true;
   peakTemp = BAL.baseTemp;
   updateHUD();
-  renderShop();
+  if(G.campaign!=='chen') renderShop();   // 陈塘关单箭塔模式无商店
 }
 // 进入一章战斗：先扣体力，不足则拦截
-function tryEnterChapter(i){
-  if(!spendStamina(STAMINA_COST)){
-    alert('体力不足（每次闯关消耗 '+STAMINA_COST+' 点），每 10 分钟恢复 1 点，请稍后再来。');
+function tryEnterChapter(i, campaign){
+  i = (i|0);
+  campaign = campaign || (LEVEL && LEVEL.campaign) || 'immune';
+  const levels = campaign==='chen' ? LEVELS_CHEN : LEVELS;
+  if(i < 0 || i >= levels.length){
+    showToast('关卡索引异常，请重新选择');
     return;
   }
-  newGame(i); startRun();
+  if(i > (campaign==='chen' ? progress.chen : progress.immune)){
+    showToast('该关卡尚未解锁，请先通关前一关');
+    return;
+  }
+  if(!spendStamina(STAMINA_COST)){
+    showToast('体力不足（每次闯关消耗 '+STAMINA_COST+' 点），每 10 分钟恢复 1 点');
+    return;
+  }
+  newGame(i, campaign); startRun();
 }
 
 // ---------- 启动 ----------
@@ -2181,11 +2797,14 @@ updateStaminaHUD();
 setInterval(()=>{ staminaRecover(); updateStaminaHUD(); }, 1000);   // 体力恢复 tick（每秒刷新显示）
 bindHomeEvents(); // 绑定模式卡片与底部导航
 
-// 750×1334 逻辑分辨率 → 按窗口等比缩放（桌面预览 / 真机适配统一）
+// 750×1334 逻辑分辨率（竖屏）/ 1334×750（横屏陈塘关），由 fitApp() 按窗口等比缩放
 function fitApp(){
   const app=document.getElementById('app');
   if(!app) return;
-  const s=Math.min(window.innerWidth/750, window.innerHeight/1334);
+  const isLand = app.classList.contains('landscape');
+  const baseW = isLand ? 1334 : 750;
+  const baseH = isLand ? 750 : 1334;
+  const s=Math.min(window.innerWidth/baseW, window.innerHeight/baseH);
   app.style.transform='translate(-50%, -50%) scale('+s+')';
 }
 if(window.addEventListener) window.addEventListener('resize', fitApp);
