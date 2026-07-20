@@ -436,6 +436,38 @@ const CELLS = {
   memory:     { name:'记忆',   short:'记', role:'intel',    cost:45, dps:0,  range:0,   atkSpeed:1.0, size:2, color:'#a78bfa', elem:null }, // 观察者(§7.2 未实现)
 };
 
+// ══ 元素变体裂变层（设计目标 §5.4 / §6：每张带元素细胞 → 炎性/抑制/凋亡 3 张独立卡） ══
+// 基础原型见上方 CELLS（19 种）。此处对每个 elem 非 null 的原型裂变出 _inf/_sup/_apo 三张，
+// 共享原型全部数值，叠加元素标记与展示名/短标/主色。元素效果逻辑待 D 任务接入（§5.4 属性克系统）。
+// 无变体原型（红细胞/血小板/Treg/记忆，elem:null）保持原 id 单张。
+const ELEM_SUFFIX = { '炎性':'_inf', '抑制':'_sup', '凋亡':'_apo' };
+const ELEM_COLOR  = { '炎性':'#ef4444', '抑制':'#3b82f6', '凋亡':'#a855f7' }; // 三元素主色（美术配色基准）
+function baseOf(type){ const i = type.lastIndexOf('_'); return (i>0 && (type.endsWith('_inf')||type.endsWith('_sup')||type.endsWith('_apo'))) ? type.slice(0,i) : type; }
+(function buildElementVariants(){
+  const baseIds = Object.keys(CELLS);            // 快照：只遍历 19 个原型，避免变体被二次裂变
+  const ELEMS = ['炎性','抑制','凋亡'];
+  for(const id of baseIds){
+    const base = CELLS[id];
+    if(!base.elem) continue;                       // 无变体：维持单张
+    // 原 id 保留为"自带元素版"（向后兼容所有引用原 id 的代码/测试），再补另外两个元素变体 → 共 3 张
+    base.base = id; base.elemColor = ELEM_COLOR[base.elem];
+    for(const e of ELEMS){
+      if(e === base.elem) continue;               // 原 id 已代表该元素，跳过
+      const vkey = id + ELEM_SUFFIX[e];
+      const ec = ELEM_COLOR[e];
+      CELLS[vkey] = Object.assign({}, base, {
+        base: id,                                  // 合成同型判定用 baseOf()
+        elem: e,
+        elemColor: ec,
+        name:  base.name + '·' + e,
+        short: base.short + ({'炎性':'炎','抑制':'抑','凋亡':'亡'}[e]),
+        color: ec,                                 // 卡面主色按元素区分（美术可在此取色）
+      });
+    }
+  }
+})();
+
+
 // ---------- §7 合成主线：同型同级 2合1 → tier+1 ----------
 // 占位尺寸不变（“不压缩格子”天然满足），属性按阶递增。
 const TIER_MULT = 1.7;   // 每升一阶：dps / 能量 / 光环 / 减益 主数值倍率
@@ -597,7 +629,7 @@ function mergeAll(){
     // ① 商店卡 → 场上同型同阶塔（优先：把卡并入场上塔，保留火力）
     for(const s of snapS){
       if(s.type===null || usedS.has(s.i) || s.tier!==lvl) continue;
-      const tw = snapT.find(x=> x.type===s.type && x.tier===lvl && !usedT.has(x.t));
+      const tw = snapT.find(x=> baseOf(x.type)===baseOf(s.type) && x.tier===lvl && !usedT.has(x.t));
       if(tw){
         tw.t.tier = lvl+1; usedT.add(tw.t); usedS.add(s.i);
         G.shop[s.i]=null;
@@ -608,7 +640,7 @@ function mergeAll(){
     for(let a=0;a<snapS.length;a++){
       const sA=snapS[a];
       if(sA.type===null || usedS.has(sA.i) || sA.tier!==lvl) continue;
-      const sB = snapS.find((s,j)=> j>a && s.type===sA.type && s.tier===lvl && !usedS.has(s.i));
+      const sB = snapS.find((s,j)=> j>a && baseOf(s.type)===baseOf(sA.type) && s.tier===lvl && !usedS.has(s.i));
       if(sB){
         G.shop[sA.i]={type:sA.type, tier:lvl+1}; G.shop[sB.i]=null;
         usedS.add(sA.i); usedS.add(sB.i);
@@ -619,7 +651,7 @@ function mergeAll(){
     for(let a=0;a<snapT.length;a++){
       const A=snapT[a];
       if(usedT.has(A.t) || A.tier!==lvl) continue;
-      const B = snapT.find((x,j)=> j>a && x.type===A.type && x.tier===lvl && !usedT.has(x.t));
+      const B = snapT.find((x,j)=> j>a && baseOf(x.type)===baseOf(A.type) && x.tier===lvl && !usedT.has(x.t));
       if(B){
         A.t.tier = lvl+1; usedT.add(A.t); usedT.add(B.t);
         removeTowerFromGrid(B.t); G.towers=G.towers.filter(x=>x!==B.t);
@@ -632,9 +664,19 @@ function mergeAll(){
   updateMergeButton();
   return did;
 }
-const SHOP_POOL = ['neutrophil','macrophage','tcell','antibody','nk','interferon','memory','redcell','plasma','eosinophil','complement','mastcell','dendritic','cytostorm','platelet','treg','perforin','apoptosis','thcell'];
-const WEIGHTS   = { neutrophil:11.86,macrophage:11.86,tcell:11.86,antibody:11.86,nk:11.86,interferon:11.86,memory:11.86,redcell:17,
-  plasma:11, eosinophil:10, complement:10, mastcell:10, dendritic:10, cytostorm:9, platelet:9, treg:9, perforin:9, apoptosis:9, thcell:10 };
+// 卡池 = 裂变后的全部 CELLS 键（49 张：15 带变体×3 + 4 无变体单张）。
+// 权重按原型(base)分配：同一 base 的三元素变体均分该原型权重（抽到某细胞概率被三元素平分）。
+const BASE_WEIGHT = { redcell:17, neutrophil:11.86, macrophage:11.86, tcell:11.86, nk:11.86, plasma:11, eosinophil:10, complement:10,
+  mastcell:10, dendritic:10, cytostorm:9, platelet:9, treg:9, perforin:9, apoptosis:9, thcell:10, antibody:11.86, interferon:11.86, memory:11.86 };
+const SHOP_POOL = Object.keys(CELLS);
+const WEIGHTS = (function(){
+  const w = {};
+  for(const id in CELLS){
+    const b = CELLS[id].base || id;            // 裂变卡取原型权重
+    w[id] = (BASE_WEIGHT[b] || 10) / (CELLS[b] && CELLS[b].elem ? 3 : 1); // 三元素变体均分
+  }
+  return w;
+})();
 
 const MATRIX = {
   rhinovirus:{ neutrophil:1.0, macrophage:1.0, tcell:0.8, antibody:1.6, nk:1.0, interferon:1.0, memory:1.0 },
